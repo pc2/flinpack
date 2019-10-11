@@ -37,10 +37,10 @@ SOFTWARE.
 #if QUARTUS_MAJOR_VERSION > 18
 #include "CL/cl_ext_intelfpga.h"
 #endif
+#include "cxxopts.hpp"
 
 /* Project's headers */
 #include "src/host/benchmark_helper.h"
-#include "src/host/cxxopts.hpp"
 #include "src/host/execution.h"
 
 
