@@ -78,7 +78,7 @@ ifdef DEBUG
 CXX_FLAGS += -g -DDEBUG
 endif
 
-CXX_PARAMS += -I. --std=c++11
+CXX_PARAMS += -I. -I./cxxopts/include --std=c++11
 
 $(info Common Parameters:)
 $(info BUILD_SUFFIX            = $(BUILD_SUFFIX))
