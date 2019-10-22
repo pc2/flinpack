@@ -132,11 +132,7 @@ kernel_emulate: $(KERNEL_SRC)
 
 run_emu: host kernel_emulate
 	chmod +x $(BIN_DIR)$(TARGET)
-ifeq ($(QUARTUS_MAJOR_VERSION), 19)
-	CL_CONFIG_CPU_EMULATE_DEVICES=1 gdb --args $(BIN_DIR)$(TARGET) -f $(BIN_DIR)$(KERNEL_TARGET)_emulate.aocx
-else
 	CL_CONTEXT_EMULATOR_DEVICE_INTELFPGA=1 gdb --args $(BIN_DIR)$(TARGET) -f $(BIN_DIR)$(KERNEL_TARGET)_emulate.aocx
-endif
 
 kernel_profile: $(KERNEL_SRC)
 	$(MKDIR_P) $(BIN_DIR)
