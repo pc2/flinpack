@@ -48,7 +48,7 @@ namespace bm_execution {
     */
     std::shared_ptr<ExecutionResults>
     calculate(cl::Context context, cl::Device device, cl::Program program,
-                   uint repetitions, ulong matrixSize) {
+                   uint repetitions, ulong matrixSize, uint blockSize) {
        uint lda = matrixSize;
        DATA_TYPE* a;
        posix_memalign(reinterpret_cast<void**>(&a), 64,
@@ -85,7 +85,7 @@ namespace bm_execution {
         // prepare kernels
         err = gefakernel.setArg(0, Buffer_a);
         ASSERT_CL(err);
-        err = gefakernel.setArg(1, static_cast<uint>(matrixSize / BLOCK_SIZE));
+        err = gefakernel.setArg(1, static_cast<uint>(matrixSize / blockSize));
         ASSERT_CL(err);
 
         /* --- Execute actual benchmark kernels --- */

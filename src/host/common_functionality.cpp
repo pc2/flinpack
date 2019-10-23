@@ -295,7 +295,8 @@ int main(int argc, char * argv[]) {
 
     // Start actual benchmark
     auto results = bm_execution::calculate(context, usedDevice[0], program,
-              programSettings->numRepetitions, programSettings->matrixSize);
+              programSettings->numRepetitions, programSettings->matrixSize,
+              programSettings->blockSize);
 
     printResults(results, programSettings->matrixSize);
 

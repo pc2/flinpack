@@ -33,13 +33,13 @@ namespace bm_execution {
                         method
     @param dataSize The size of the data array that may be used for benchmark
                     execution in number of items
-    @param useMemInterleaving Prepare buffers using memory interleaving
+    @param blockSize Size of a block that is calculated by the kernel
 
     @return The time measurements and the error rate counted from the executions
     */
     std::shared_ptr<ExecutionResults>
     calculate(cl::Context context, cl::Device device, cl::Program program,
-                   uint repetitions, size_t dataSize);
+                   uint repetitions, size_t dataSize, uint block_size);
 }
 
 #endif // SRC_HOST_EXECUTION_H_
