@@ -106,13 +106,13 @@ void printResults(std::shared_ptr<bm_execution::ExecutionResults> results,
                   size_t dataSize) {
     std::cout << std::setw(ENTRY_SPACE)
               << "best" << std::setw(ENTRY_SPACE) << "mean"
-              << std::setw(ENTRY_SPACE) << "GUOPS"
+              << std::setw(ENTRY_SPACE) << "GFLOPS"
               << std::setw(ENTRY_SPACE) << "error" << std::endl;
 
     // Calculate performance for kernel execution plus data transfer
     double tmean = 0;
     double tmin = std::numeric_limits<double>::max();
-    double gops = ((2.0e0*(dataSize*dataSize*dataSize))/3.0
+    double gflops = ((2.0e0*(dataSize*dataSize*dataSize))/3.0
                     + 2.0*(dataSize*dataSize)) / 1.0e9;
     for (double currentTime : results->times) {
         tmean +=  currentTime;
@@ -124,7 +124,7 @@ void printResults(std::shared_ptr<bm_execution::ExecutionResults> results,
 
     std::cout << std::setw(ENTRY_SPACE)
               << tmin << std::setw(ENTRY_SPACE) << tmean
-              << std::setw(ENTRY_SPACE) << gops / tmin
+              << std::setw(ENTRY_SPACE) << gflops / tmin
               << std::setw(ENTRY_SPACE) << (results->errorRate)
               << std::endl;
 }
@@ -159,44 +159,87 @@ Standard LU factorization on a block with fixed size
 Case 1 of Zhangs description
 */
 void
-gefa_ref_nopivot(DATA_TYPE* a, ulong n, ulong lda) {
+gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
+
+    int* tmp_colsort = new int[n];
+    for (int i = 0; i < n; i++) {
+        tmp_colsort[i] = i;
+    }
     // For each diagnonal element
     for (int k = 0; k < n - 1; k++) {
+        DATA_TYPE max_val = fabs(a[k * lda + tmp_colsort[k]]);
+        int pvt_index = k;
+        for (int i = k + 1; i < n; i++) {
+            if (max_val < fabs(a[k * lda + tmp_colsort[i]])) {
+                pvt_index = i;
+                max_val = fabs(a[k * lda + tmp_colsort[i]]);
+            }
+        }
+        int tmp = tmp_colsort[k];
+        tmp_colsort[k] = tmp_colsort[pvt_index];
+        tmp_colsort[pvt_index] = tmp;
+        ipvt[k] = pvt_index;
+
         // For each element below it
         for (int i = k + 1; i < n; i++) {
-            a[i * lda + k] *= 1.0 / a[k * lda + k];
+            a[i * lda + tmp_colsort[k]] *= 1.0 / a[k * lda + tmp_colsort[k]];
         }
         // For each column right of current diagonal element
         for (int j = k + 1; j < n; j++) {
             // For each element below it
             for (int i = k+1; i < n; i++) {
-                a[i * lda + j] -= a[i * lda + k] * a[k * lda + j];
+                a[i * lda + tmp_colsort[j]] -= a[i * lda + tmp_colsort[k]]
+                                                * a[k * lda + tmp_colsort[j]];
             }
         }
     }
+    delete tmp_colsort;
 }
 
 void
-gesl_ref_nopivot(DATA_TYPE* a, DATA_TYPE* b, ulong n, uint lda) {
+gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* ipvt, ulong n, uint lda) {
+
+    DATA_TYPE* b_tmp = new DATA_TYPE[n];
+    int* tmp_colsort = new int[n];
+
+    for (int i = 0; i < n; i++) {
+        tmp_colsort[i] = i;
+    }
+
+    for (int k = 0; k < n; k++) {
+        b_tmp[k] = b[k];
+    }
+
     // solve l*y = b
     // For each row in matrix
     for (int k = 0; k < n-1; k++) {
+        int tmp = tmp_colsort[k];
+        tmp_colsort[k] = tmp_colsort[ipvt[k]];
+        tmp_colsort[ipvt[k]] = tmp;
         // For each row below add
         for (int i = k+1; i < n; i++) {
             // add solved upper row to current row
-            b[i] -= b[k] * a[lda*i + k];
+            b_tmp[tmp_colsort[i]] -= b_tmp[tmp_colsort[k]]
+                                                    * a[lda*i + tmp_colsort[k]];
         }
     }
 
     // now solve  u*x = y
 
     for (int k = n-1; k >= 0; k--) {
-        b[k] = b[k]/a[lda*k + k];
-        DATA_TYPE t = -b[k];
+        b_tmp[tmp_colsort[k]] = b_tmp[tmp_colsort[k]]/a[lda*k + tmp_colsort[k]];
+        DATA_TYPE t = -b_tmp[tmp_colsort[k]];
         for (int i = 0; i < k; i++) {
-            b[i] += t * a[lda*i + k];
+            b_tmp[tmp_colsort[i]] += t * a[lda*i + tmp_colsort[k]];
         }
     }
+
+    for (int k = 0; k < n; k++) {
+        b[k] = b_tmp[k];
+    }
+
+    delete b_tmp;
+    delete tmp_colsort;
 }
 
 void dmxpy(int n1, DATA_TYPE* y, int n2, int ldm, DATA_TYPE* x, DATA_TYPE* m) {

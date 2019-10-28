@@ -102,7 +102,7 @@ Can be used in exchange with kernel functions for functionality testing
 @param lda row with of the matrix. must be >=n
 
 */
-void gefa_ref_nopivot(DATA_TYPE* a, ulong n, ulong lda);
+void gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt);
 
 /**
 Solve linear equations using its LU decomposition.
@@ -111,11 +111,12 @@ where A is a matrix of size n*n
 
 @param a the matrix a in LU representation calculated by gefa call
 @param b vector b of the given equation
+@param ipvt vector containing pivoting information
 @param n size of matrix A
 @param lda row with of the matrix. must be >=n
 
 */
-void gesl_ref_nopivot(DATA_TYPE* a, DATA_TYPE* b, ulong n, uint lda);
+void gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* ipvt, ulong n, uint lda);
 
 /**
 Print the benchmark results to stdout
