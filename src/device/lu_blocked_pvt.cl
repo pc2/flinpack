@@ -168,7 +168,7 @@ lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 	for (int i = 0; i < BLOCK_SIZE; i++) {
 		#pragma unroll
 		for (int j = 0; j <  BLOCK_SIZE; j++) {
-			a_block_out[j][i] = tmp_block_write[i][j];
+			a_block_out[j][i] = tmp_block_write[col_order[i]][j];
 		}
 	}
 
