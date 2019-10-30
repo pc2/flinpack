@@ -120,24 +120,38 @@ namespace bm_execution {
         compute_queue.enqueueReadBuffer(Buffer_pivot, CL_TRUE, 0,
                                          sizeof(cl_int)*matrixSize, ipvt);
 
+ #ifdef DEBUG
+         for (int i= 0; i < matrixSize; i++) {
+             for (int j=0; j < matrixSize; j++) {
+                 std::cout << a[i*lda + j] << ", ";
+             }
+             std::cout << std::endl;
+         }
+         std::cout <<  std::endl;
+         std::cout << "IPVT: ";
+         for (int j=0; j < matrixSize; j++) {
+             std::cout << ipvt[j] << ", ";
+         }
+         std::cout << std::endl;
+         std::cout << std::endl;
+         std::cout << "B: ";
+         for (int j=0; j < matrixSize; j++) {
+             std::cout << b[j] << ", ";
+         }
+         std::cout << std::endl;
+         std::cout << std::endl;
+ #endif
+
+        gesl_ref(a, b, ipvt, matrixSize, matrixSize);
+
 #ifdef DEBUG
-        std::cout << "A: " << std::endl;
-        for (int i= 0; i < matrixSize; i++) {
-            for (int j=0; j < matrixSize; j++) {
-                std::cout << a[i*lda + j] << ", ";
-            }
-            std::cout << std::endl;
-        }
-        std::cout <<  std::endl;
-        std::cout << "IPVT: ";
+        std::cout << "B res: ";
         for (int j=0; j < matrixSize; j++) {
-            std::cout << ipvt[j] << ", ";
+            std::cout << b[j] << ", ";
         }
         std::cout << std::endl;
         std::cout << std::endl;
 #endif
-
-        gesl_ref(a, b, ipvt, matrixSize, matrixSize);
 
         /* --- Check Results --- */
 
@@ -156,9 +170,30 @@ namespace bm_execution {
             std::cout << std::endl;
         }
         std::cout <<  std::endl;
+        std::cout << "IPVT: ";
+        for (int j=0; j < matrixSize; j++) {
+            std::cout << ipvt[j] << ", ";
+        }
+        std::cout << std::endl;
+        std::cout << std::endl;
+        std::cout << "B: ";
+        for (int j=0; j < matrixSize; j++) {
+            std::cout << b[j] << ", ";
+        }
+        std::cout << std::endl;
+        std::cout << std::endl;
 #endif
 
         gesl_ref(a, b, ipvt, matrixSize, matrixSize);
+
+#ifdef DEBUG
+        std::cout << "B res: ";
+        for (int j=0; j < matrixSize; j++) {
+            std::cout << b[j] << ", ";
+        }
+        std::cout << std::endl;
+        std::cout << std::endl;
+#endif
         checkLINPACKresults(b, matrixSize, matrixSize);
 
         free(reinterpret_cast<void *>(a));
