@@ -164,6 +164,7 @@ gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
     int* tmp_colsort = new int[n];
     for (int i = 0; i < n; i++) {
         tmp_colsort[i] = i;
+        ipvt[i] = i;
     }
     // For each diagnonal element
     for (int k = 0; k < n - 1; k++) {
@@ -192,7 +193,19 @@ gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
                                                 * a[k * lda + tmp_colsort[j]];
             }
         }
+
+        #ifdef DEBUG
+                std::cout << "A(k=" << k <<"): " << std::endl;
+                for (int i= 0; i < n; i++) {
+                    for (int j=0; j < n; j++) {
+                        std::cout << a[i*lda + tmp_colsort[j]] << ", ";
+                    }
+                    std::cout << std::endl;
+                }
+                std::cout <<  std::endl;
+        #endif
     }
+
     delete tmp_colsort;
 }
 
@@ -207,35 +220,39 @@ gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* ipvt, ulong n, uint lda) {
     }
 
     for (int k = 0; k < n; k++) {
+        int tmp = tmp_colsort[k];
+        tmp_colsort[k] = tmp_colsort[ipvt[k]];
+        tmp_colsort[ipvt[k]] = tmp;
+    }
+
+    for (int k = 0; k < n; k++) {
         b_tmp[k] = b[k];
     }
 
     // solve l*y = b
     // For each row in matrix
     for (int k = 0; k < n-1; k++) {
-        int tmp = tmp_colsort[k];
-        tmp_colsort[k] = tmp_colsort[ipvt[k]];
-        tmp_colsort[ipvt[k]] = tmp;
         // For each row below add
         for (int i = k+1; i < n; i++) {
             // add solved upper row to current row
-            b_tmp[tmp_colsort[i]] -= b_tmp[tmp_colsort[k]]
-                                                    * a[lda*i + tmp_colsort[k]];
+            b_tmp[i] -= b_tmp[k] * a[lda*i + tmp_colsort[k]];
         }
     }
+
+
 
     // now solve  u*x = y
 
     for (int k = n-1; k >= 0; k--) {
-        b_tmp[tmp_colsort[k]] = b_tmp[tmp_colsort[k]]/a[lda*k + tmp_colsort[k]];
-        DATA_TYPE t = -b_tmp[tmp_colsort[k]];
+        b_tmp[k] = b_tmp[k]/a[lda*k + tmp_colsort[k]];
+        DATA_TYPE t = -b_tmp[k];
         for (int i = 0; i < k; i++) {
-            b_tmp[tmp_colsort[i]] += t * a[lda*i + tmp_colsort[k]];
+            b_tmp[i] += t * a[lda*i + tmp_colsort[k]];
         }
     }
 
     for (int k = 0; k < n; k++) {
-        b[k] = b_tmp[k];
+        b[k] = b_tmp[tmp_colsort[k]];
     }
 
     delete b_tmp;
@@ -274,8 +291,8 @@ checkLINPACKresults(DATA_TYPE* b_res, cl_int lda, cl_int n) {
     DATA_TYPE normx = 0.0;
 
     for (int i = 0; i < n; i++) {
-        resid = (resid > fabs((DATA_TYPE)b[i])) ? resid : fabs((DATA_TYPE)b[i]);
-        normx = (normx > fabs((DATA_TYPE)x[i])) ? normx : fabs((DATA_TYPE)x[i]);
+        resid = (resid > fabs(b[i])) ? resid : fabs(b[i]);
+        normx = (normx > fabs(x[i])) ? normx : fabs(x[i]);
     }
 
     DATA_TYPE eps = epslon(static_cast<DATA_TYPE>(1.0));
