@@ -105,7 +105,7 @@ lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 
 	DATA_TYPE tmp_block_write[BLOCK_SIZE][BLOCK_SIZE];
 	DATA_TYPE tmp_block_read[BLOCK_SIZE][BLOCK_SIZE];
-	int tmp_pivot[BLOCK_SIZE];
+	int col_order[BLOCK_SIZE];
 
 	// copy columnwise
 	for (int i = 0; i < BLOCK_SIZE; i++) {
@@ -119,7 +119,7 @@ lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 	#pragma unroll
 	for (int i = 0; i < BLOCK_SIZE; i++) {
 		pivot_row[i] = i;
-		tmp_pivot[i] = i;
+		col_order[i] = i;
 	}
 
 	// For each diagnonal element
@@ -127,39 +127,41 @@ lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 	for (int k = 0; k < BLOCK_SIZE; k++) {
 		DATA_TYPE tmp_scale_col[BLOCK_SIZE];
 
-		DATA_TYPE max_val = fabs(tmp_block_read[k][k]);
+		DATA_TYPE max_val = fabs(tmp_block_read[col_order[k]][k]);
 		for (int i=k+1; i < BLOCK_SIZE; i++) {
-			DATA_TYPE curr_val = fabs(tmp_block_read[i][k]);
+			DATA_TYPE curr_val = fabs(tmp_block_read[col_order[i]][k]);
 			if (curr_val > max_val) {
 				max_val = curr_val;
 				pivot_row[k] = i;
 			}
 		}
 		if (pivot_row[k] != k) {
-			tmp_pivot[pivot_row[k]] = tmp_pivot[k];
+			int tmp_col = col_order[k];
+			col_order[k] = col_order[pivot_row[k]];
+			col_order[pivot_row[k]] = tmp_col;
 		}
-		tmp_pivot[k] = pivot_row[k];
 
-		scale_factors[k] = 1.0 / tmp_block_read[pivot_row[k]][k];
+		scale_factors[k] = 1.0 / tmp_block_read[col_order[k]][k];
 		// For each element below it
 		#pragma unroll
 		for (int i = k + 1; i < BLOCK_SIZE; i++) {
-			tmp_scale_col[i] =  tmp_block_read[tmp_pivot[k]][i] * scale_factors[k];
-			tmp_block_write[tmp_pivot[k]][i] = tmp_scale_col[i];
+			tmp_scale_col[i] =  tmp_block_read[col_order[k]][i] * scale_factors[k];
+			tmp_block_write[col_order[k]][i] = tmp_scale_col[i];
 		}
+
 		// For each column right of current diagonal element
 		for (int j = k + 1; j < BLOCK_SIZE; j++) {
-			DATA_TYPE scale_val = tmp_block_write[tmp_pivot[j]][k];
+			DATA_TYPE scale_val = tmp_block_write[col_order[j]][k];
 			// For each element below it
 			#pragma unroll
 			for (int i = k+1; i < BLOCK_SIZE; i++) {
-				tmp_block_write[tmp_pivot[j]][i] = tmp_block_read[tmp_pivot[j]][i] - tmp_scale_col[i] * scale_val;
+				tmp_block_write[col_order[j]][i] = tmp_block_read[col_order[j]][i] - tmp_scale_col[i] * scale_val;
 			}
 		}
 		for (int i = k; i < BLOCK_SIZE; i++) {
 			#pragma unroll
 			for (int j = 0; j <  BLOCK_SIZE; j++) {
-				tmp_block_read[i][j] = tmp_block_write[i][j];
+				tmp_block_read[col_order[i]][j] = tmp_block_write[col_order[i]][j];
 			}
 		}
 	}
@@ -169,6 +171,7 @@ lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 			a_block_out[j][i] = tmp_block_write[i][j];
 		}
 	}
+
 }
 
 /**
@@ -182,15 +185,11 @@ left_blocks_c2(local const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
 				local DATA_TYPE current_block_out[BLOCK_SIZE][BLOCK_SIZE],
 				const DATA_TYPE scale_factors[BLOCK_SIZE],
 				const uint pivot_row[BLOCK_SIZE]) {
+
 	DATA_TYPE tmp_block_write2[BLOCK_SIZE][BLOCK_SIZE];
 	DATA_TYPE tmp_block_read2[BLOCK_SIZE][BLOCK_SIZE];
 	DATA_TYPE tmp_scale_col[BLOCK_SIZE];
-	int tmp_pivot[BLOCK_SIZE];
-
-	#pragma unroll
-	for (int i = 0; i < BLOCK_SIZE; i++) {
-		tmp_pivot[i] = i;
-	}
+	uint col_order[BLOCK_SIZE];
 
 	// copy columnwise
 	for (int i = 0; i < BLOCK_SIZE; i++) {
@@ -198,33 +197,52 @@ left_blocks_c2(local const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
 		for (int j = 0; j <  BLOCK_SIZE; j++) {
 			tmp_block_read2[i][j] = current_block_in[j][i];
 		}
+		col_order[i] = i;
 	}
 	// For each diagonal element in top block
 	#pragma max_concurrency 1
 	for (int k=0; k < BLOCK_SIZE; k++) {
 		if (pivot_row[k] != k) {
-			tmp_pivot[pivot_row[k]] = tmp_pivot[k];
+			int tmp_col = col_order[k];
+			col_order[k] = col_order[pivot_row[k]];
+			col_order[pivot_row[k]] = tmp_col;
 		}
-		tmp_pivot[k] = pivot_row[k];
+#ifdef DEBUG
+		printf("A(%d):\n", k);
+		for (int j = 0; j < BLOCK_SIZE; j++) {
+			for (int i = 0; i <  BLOCK_SIZE; i++) {
+				printf("%f, ", top_block[j][col_order[i]]);
+			}
+			printf("\n");
+		}
+		for (int j = 0; j < BLOCK_SIZE; j++) {
+			for (int i = 0; i <  BLOCK_SIZE; i++) {
+				printf("%f, ", tmp_block_read2[col_order[i]][j]);
+			}
+			printf("\n");
+		}
+		printf("\n\n");
+#endif
 		// For each element below it in current block
 		#pragma unroll
 		for (int i=0; i < BLOCK_SIZE; i++) {
 			// printf("C2: %f * %f\n",tmp_block2[i][k], scale_factors[k]);
-			tmp_scale_col[i] = tmp_block_read2[tmp_pivot[k]][i] * scale_factors[k];
-			tmp_block_write2[k][i] = tmp_scale_col[i];
+			tmp_scale_col[i] = tmp_block_read2[col_order[k]][i] * scale_factors[k];
+			tmp_block_write2[col_order[k]][i] = tmp_scale_col[i];
 		}
 		// For each column right of the current diagnonal element
-		for (int i = k+1; i < BLOCK_SIZE; i++) {
-			DATA_TYPE tmp_col[BLOCK_SIZE];
+		for (int j = k+1; j < BLOCK_SIZE; j++) {
 			#pragma unroll
-			for (int j = 0; j < BLOCK_SIZE; j++) {
-				tmp_block_write2[tmp_pivot[i]][j] = tmp_block_read2[tmp_pivot[i]][j] - tmp_scale_col[j] * top_block[k][i];
+			for (int i = 0; i < BLOCK_SIZE; i++) {
+				tmp_block_write2[col_order[j]][i] =
+							tmp_block_read2[col_order[j]][i] - tmp_scale_col[i]
+												* top_block[k][col_order[j]];
 			}
 		}
 		for (int i = k; i < BLOCK_SIZE; i++) {
 			#pragma unroll
 			for (int j = 0; j <  BLOCK_SIZE; j++) {
-				tmp_block_read2[i][j] = tmp_block_write2[i][j];
+				tmp_block_read2[col_order[i]][j] = tmp_block_write2[col_order[i]][j];
 			}
 		}
 	}
@@ -234,6 +252,22 @@ left_blocks_c2(local const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
 			current_block_out[j][i] = tmp_block_write2[i][j];
 		}
 	}
+#ifdef DEBUG
+	printf("A(end):\n");
+	for (int j = 0; j < BLOCK_SIZE; j++) {
+		for (int i = 0; i <  BLOCK_SIZE; i++) {
+			printf("%f, ", top_block[j][col_order[i]]);
+		}
+		printf("\n");
+	}
+	for (int j = 0; j < BLOCK_SIZE; j++) {
+		for (int i = 0; i <  BLOCK_SIZE; i++) {
+			printf("%f, ", tmp_block_read2[col_order[i]][j]);
+		}
+		printf("\n");
+	}
+	printf("\n\n");
+#endif
 }
 
 /**
@@ -330,7 +364,8 @@ void gefa(global DATA_TYPE* restrict a, global uint* pvt,  uint a_size) {
 		uint pivot_row[BLOCK_SIZE];
 
 		// execute factorization of next block
-		lu_factorization_c1(diag_block, diag_block_out, scale_factors, pivot_row);
+		lu_factorization_c1(diag_block, diag_block_out, scale_factors,
+													pivot_row);
 
 		#pragma unroll GLOBAL_MEM_UNROLL
 		for (int i=0; i<BLOCK_SIZE; i++) {
