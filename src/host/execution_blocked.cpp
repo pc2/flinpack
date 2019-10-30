@@ -28,8 +28,10 @@ SOFTWARE.
 #include <fstream>
 #include <memory>
 #include <vector>
-// debug import
+
+#ifdef DEBUG
 #include <iostream>
+#endif
 
 /* External library headers */
 #include "CL/cl.hpp"
@@ -112,6 +114,7 @@ namespace bm_execution {
         compute_queue.enqueueReadBuffer(Buffer_a, CL_TRUE, 0,
                                          sizeof(DATA_TYPE)*lda*matrixSize, a);
 
+#ifdef DEBUG
         for (int i= 0; i < matrixSize; i++) {
             for (int j=0; j < matrixSize; j++) {
                 std::cout << a[i*lda + j] << ", ";
@@ -119,8 +122,9 @@ namespace bm_execution {
             std::cout << std::endl;
         }
         std::cout <<  std::endl;
+#endif
 
-        gesl_ref_nopivot(a, b, matrixSize, matrixSize);
+        gesl_ref(a, b, ipvt, matrixSize, matrixSize);
 
         /* --- Check Results --- */
 
@@ -129,8 +133,9 @@ namespace bm_execution {
         /* Check CPU reference results */
 
         matgen(a, lda, matrixSize, b, &norma);
-        gefa_ref_nopivot(a, matrixSize, lda);
+        gefa_ref(a, matrixSize, lda, ipvt);
 
+#ifdef DEBUG
         for (int i= 0; i < matrixSize; i++) {
             for (int j=0; j < matrixSize; j++) {
                 std::cout << a[i*lda + j] << ", ";
@@ -138,8 +143,9 @@ namespace bm_execution {
             std::cout << std::endl;
         }
         std::cout <<  std::endl;
+#endif
 
-        gesl_ref_nopivot(a, b, matrixSize, matrixSize);
+        gesl_ref(a, b, ipvt, matrixSize, matrixSize);
         checkLINPACKresults(b, matrixSize, matrixSize);
 
         free(reinterpret_cast<void *>(a));
