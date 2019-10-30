@@ -73,21 +73,16 @@ CXX_PARAMS += -DDATA_TYPE=cl_$(DATA_TYPE) -DDATA_TYPE_UNSIGNED=cl_$(DATA_TYPE_UN
 AOC_PARAMS += -DDATA_TYPE=$(DATA_TYPE) -DDATA_TYPE_UNSIGNED=$(DATA_TYPE_UNSIGNED)
 endif
 
-
-ifdef DEBUG
-CXX_FLAGS += -g -DDEBUG
-endif
-
 CXX_PARAMS += -I. -I./cxxopts/include --std=c++11
 
 $(info Common Parameters:)
 $(info BUILD_SUFFIX            = $(BUILD_SUFFIX))
 $(info MATRIX_SIZE             = $(MATRIX_SIZE))
+$(info BLOCK_SIZE              = $(BLOCK_SIZE))
 $(info TYPE                    = $(TYPE))
 $(info Device Only Parameters:)
 $(info BOARD                   = $(BOARD))
 $(info AOC_FLAGS               = $(AOC_FLAGS))
-$(info BLOCK_SIZE              = $(BLOCK_SIZE))
 $(info GLOBAL_MEM_UNROLL       = $(GLOBAL_MEM_UNROLL))
 $(info Host Only Parameters:)
 $(info CXX_FLAGS               = $(CXX_FLAGS))
@@ -106,7 +101,6 @@ info:
 	$(info Kernels:)
 	$(info kernel                       = Compile global memory kernel)
 	$(info kernel_emulate               = Compile  global memory kernel for emulation)
-	$(info kernel_profile               = Compile  global memory kernel with profiling information enabled)
 	$(info kernel_profile               = Compile  global memory kernel with profiling information enabled)
 	$(info run_emu                      = Creates host and kernel_emulate and executes the emulation with GDB)
 	$(info ************************************************)
