@@ -159,10 +159,10 @@ Standard LU factorization on a block with fixed size
 Case 1 of Zhangs description
 */
 void
-gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
+gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* col_order) {
 
     for (int i = 0; i < n; i++) {
-        ipvt[i] = i;
+        col_order[i] = i;
     }
     // For each diagnonal element
     for (int k = 0; k < n - 1; k++) {
@@ -179,7 +179,9 @@ gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
             a[i * lda + k] = a[i * lda + pvt_index];
             a[i * lda + pvt_index] = tmp_val;
         }
-        ipvt[k] = pvt_index;
+        int tmp = col_order[k];
+        col_order[k] = col_order[pvt_index];
+        col_order[pvt_index] = tmp;
 
         // For each element below it
         for (int i = k + 1; i < n; i++) {
@@ -207,20 +209,9 @@ gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
 }
 
 void
-gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* ipvt, ulong n, uint lda) {
+gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* col_order, ulong n, uint lda) {
 
     DATA_TYPE* b_tmp = new DATA_TYPE[n];
-    int* tmp_colsort = new int[n];
-
-    for (int i = 0; i < n; i++) {
-        tmp_colsort[i] = i;
-    }
-
-    for (int k = 0; k < n; k++) {
-        int tmp = tmp_colsort[k];
-        tmp_colsort[k] = tmp_colsort[ipvt[k]];
-        tmp_colsort[ipvt[k]] = tmp;
-    }
 
     for (int k = 0; k < n; k++) {
         b_tmp[k] = b[k];
@@ -236,8 +227,6 @@ gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* ipvt, ulong n, uint lda) {
         }
     }
 
-
-
     // now solve  u*x = y
 
     for (int k = n-1; k >= 0; k--) {
@@ -249,11 +238,10 @@ gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* ipvt, ulong n, uint lda) {
     }
 
     for (int k = 0; k < n; k++) {
-        b[k] = b_tmp[tmp_colsort[k]];
+        b[k] = b_tmp[col_order[k]];
     }
 
     delete b_tmp;
-    delete tmp_colsort;
 }
 
 void dmxpy(int n1, DATA_TYPE* y, int n2, int ldm, DATA_TYPE* x, DATA_TYPE* m) {
