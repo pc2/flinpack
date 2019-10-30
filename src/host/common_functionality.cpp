@@ -161,36 +161,35 @@ Case 1 of Zhangs description
 void
 gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
 
-    int* tmp_colsort = new int[n];
     for (int i = 0; i < n; i++) {
-        tmp_colsort[i] = i;
         ipvt[i] = i;
     }
     // For each diagnonal element
     for (int k = 0; k < n - 1; k++) {
-        DATA_TYPE max_val = fabs(a[k * lda + tmp_colsort[k]]);
+        DATA_TYPE max_val = fabs(a[k * lda + k]);
         int pvt_index = k;
         for (int i = k + 1; i < n; i++) {
-            if (max_val < fabs(a[k * lda + tmp_colsort[i]])) {
+            if (max_val < fabs(a[k * lda + i])) {
                 pvt_index = i;
-                max_val = fabs(a[k * lda + tmp_colsort[i]]);
+                max_val = fabs(a[k * lda + i]);
             }
         }
-        int tmp = tmp_colsort[k];
-        tmp_colsort[k] = tmp_colsort[pvt_index];
-        tmp_colsort[pvt_index] = tmp;
+        for (int i = 0; i < n; i++) {
+            DATA_TYPE tmp_val = a[i * lda + k];
+            a[i * lda + k] = a[i * lda + pvt_index];
+            a[i * lda + pvt_index] = tmp_val;
+        }
         ipvt[k] = pvt_index;
 
         // For each element below it
         for (int i = k + 1; i < n; i++) {
-            a[i * lda + tmp_colsort[k]] *= 1.0 / a[k * lda + tmp_colsort[k]];
+            a[i * lda + k] *= 1.0 / a[k * lda + k];
         }
         // For each column right of current diagonal element
         for (int j = k + 1; j < n; j++) {
             // For each element below it
             for (int i = k+1; i < n; i++) {
-                a[i * lda + tmp_colsort[j]] -= a[i * lda + tmp_colsort[k]]
-                                                * a[k * lda + tmp_colsort[j]];
+                a[i * lda + j] -= a[i * lda + k] * a[k * lda + j];
             }
         }
 
@@ -198,15 +197,13 @@ gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
                 std::cout << "A(k=" << k <<"): " << std::endl;
                 for (int i= 0; i < n; i++) {
                     for (int j=0; j < n; j++) {
-                        std::cout << a[i*lda + tmp_colsort[j]] << ", ";
+                        std::cout << a[i*lda + j] << ", ";
                     }
                     std::cout << std::endl;
                 }
                 std::cout <<  std::endl;
         #endif
     }
-
-    delete tmp_colsort;
 }
 
 void
@@ -235,7 +232,7 @@ gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* ipvt, ulong n, uint lda) {
         // For each row below add
         for (int i = k+1; i < n; i++) {
             // add solved upper row to current row
-            b_tmp[i] -= b_tmp[k] * a[lda*i + tmp_colsort[k]];
+            b_tmp[i] -= b_tmp[k] * a[lda*i + k];
         }
     }
 
@@ -244,10 +241,10 @@ gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* ipvt, ulong n, uint lda) {
     // now solve  u*x = y
 
     for (int k = n-1; k >= 0; k--) {
-        b_tmp[k] = b_tmp[k]/a[lda*k + tmp_colsort[k]];
+        b_tmp[k] = b_tmp[k]/a[lda*k + k];
         DATA_TYPE t = -b_tmp[k];
         for (int i = 0; i < k; i++) {
-            b_tmp[i] += t * a[lda*i + tmp_colsort[k]];
+            b_tmp[i] += t * a[lda*i + k];
         }
     }
 
