@@ -121,7 +121,7 @@ lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 
 	// For each diagnonal element
 	#pragma max_concurrency 1
-	for (int k = 0; k < BLOCK_SIZE - 1; k++) {
+	for (int k = 0; k < BLOCK_SIZE; k++) {
 
 		DATA_TYPE tmp_scale_col[BLOCK_SIZE];
 		int col_order[BLOCK_SIZE];
@@ -213,22 +213,6 @@ left_blocks_c2(local const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
 	// For each diagonal element in top block
 	#pragma max_concurrency 1
 	for (int k=0; k < BLOCK_SIZE; k++) {
-#ifdef DEBUG
-		printf("A(%d):\n", k);
-		for (int j = 0; j < BLOCK_SIZE; j++) {
-			for (int i = 0; i <  BLOCK_SIZE; i++) {
-				printf("%f, ", top_block[j][i]);
-			}
-			printf("\n");
-		}
-		for (int j = 0; j < BLOCK_SIZE; j++) {
-			for (int i = 0; i <  BLOCK_SIZE; i++) {
-				printf("%f, ", tmp_block_read2[i][j]);
-			}
-			printf("\n");
-		}
-		printf("\n\n");
-#endif
 		// For each element below it in current block
 		#pragma unroll
 		for (int i=0; i < BLOCK_SIZE; i++) {
@@ -258,22 +242,6 @@ left_blocks_c2(local const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
 			current_block_out[j][i] = tmp_block_write2[i][j];
 		}
 	}
-#ifdef DEBUG
-	printf("A(end):\n");
-	for (int j = 0; j < BLOCK_SIZE; j++) {
-		for (int i = 0; i <  BLOCK_SIZE; i++) {
-			printf("%f, ", top_block[j][i]);
-		}
-		printf("\n");
-	}
-	for (int j = 0; j < BLOCK_SIZE; j++) {
-		for (int i = 0; i <  BLOCK_SIZE; i++) {
-			printf("%f, ", tmp_block_read2[i][j]);
-		}
-		printf("\n");
-	}
-	printf("\n\n");
-#endif
 }
 
 /**
@@ -285,9 +253,9 @@ void
 top_blocks_c3(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 			  local const DATA_TYPE current_block_in[BLOCK_SIZE][BLOCK_SIZE],
 			  local DATA_TYPE current_block_out[BLOCK_SIZE][BLOCK_SIZE],
-			  const int ipvt[BLOCK_SIZE]) {
+			  const uint ipvt[BLOCK_SIZE]) {
 	DATA_TYPE tmp_block3[BLOCK_SIZE][BLOCK_SIZE];
-	int col_order[BLOCK_SIZE];
+
 
 	for (int j = 0; j < BLOCK_SIZE; j++) {
 		#pragma unroll
@@ -296,26 +264,59 @@ top_blocks_c3(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 		}
 	}
 
-	for (int i=0; i < BLOCK_SIZE; i++) {
-		col_order[i] = i;
-	}
 	// For each diagonal element in left block
 	for (int k=0; k < BLOCK_SIZE; k++) {
+#ifdef DEBUG
+		printf("A(%d):\n", k);
+		for (int j = 0; j < BLOCK_SIZE; j++) {
+			for (int i = 0; i <  BLOCK_SIZE; i++) {
+				printf("%f, ", left_block[j][i]);
+			}
+			for (int i = 0; i <  BLOCK_SIZE; i++) {
+				printf("%f, ", current_block_out[j][i]);
+			}
+			printf("\n");
+		}
+		printf("\n\n");
+#endif
+		uint col_order[BLOCK_SIZE];
+		for (int i=0; i < BLOCK_SIZE; i++) {
+			col_order[i] = i;
+		}
+		col_order[k] = ipvt[k];
+		col_order[ipvt[k]] = k;
 		// For each column in current block
 		for (int j = k+1; j < BLOCK_SIZE; j++) {
 			// For each element below it
 			#pragma unroll
 			for (int i = 0; i < BLOCK_SIZE; i++) {
-				tmp_block3[j][i] = current_block_out[j][i] - left_block[j][k] * current_block_out[k][i];
+				tmp_block3[j][i] = current_block_out[col_order[j]][i] - left_block[j][k] * current_block_out[col_order[k]][i];
 			}
 		}
-		for (int j = k+1; j < BLOCK_SIZE; j++) {
+		#pragma unroll
+		for (int i = 0; i < BLOCK_SIZE; i++) {
+			tmp_block3[k][i] = current_block_out[col_order[k]][i];
+		}
+		for (int j = k; j < BLOCK_SIZE; j++) {
 			#pragma unroll
 			for (int i = 0; i <  BLOCK_SIZE; i++) {
 				current_block_out[j][i] = tmp_block3[j][i];
 			}
 		}
 	}
+	#ifdef DEBUG
+		printf("A(end):\n");
+		for (int j = 0; j < BLOCK_SIZE; j++) {
+			for (int i = 0; i <  BLOCK_SIZE; i++) {
+				printf("%f, ", left_block[j][i]);
+			}
+			for (int i = 0; i <  BLOCK_SIZE; i++) {
+				printf("%f, ", current_block_out[j][i]);
+			}
+			printf("\n");
+		}
+		printf("\n\n");
+	#endif
 }
 
 /**
