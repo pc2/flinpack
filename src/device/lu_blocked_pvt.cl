@@ -101,7 +101,7 @@ void
 lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 					local DATA_TYPE a_block_out[BLOCK_SIZE][BLOCK_SIZE],
 					DATA_TYPE scale_factors[BLOCK_SIZE],
-					uint col_order[BLOCK_SIZE]) {
+					uint ipvt[BLOCK_SIZE]) {
 
 	DATA_TYPE tmp_block_write[BLOCK_SIZE][BLOCK_SIZE];
 	DATA_TYPE tmp_block_read[BLOCK_SIZE][BLOCK_SIZE];
@@ -110,64 +110,79 @@ lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 	for (int i = 0; i < BLOCK_SIZE; i++) {
 		#pragma unroll
 		for (int j = 0; j <  BLOCK_SIZE; j++) {
-			tmp_block_read[i][j] = a_block_in[j][i];
-			tmp_block_write[i][j] = a_block_in[j][i];
+			tmp_block_read[i][j] = a_block_in[i][j];
 		}
 	}
 
 	#pragma unroll
 	for (int i = 0; i < BLOCK_SIZE; i++) {
-		col_order[i] = i;
+		ipvt[i] = i;
 	}
 
 	// For each diagnonal element
 	#pragma max_concurrency 1
-	for (int k = 0; k < BLOCK_SIZE; k++) {
-		DATA_TYPE tmp_scale_col[BLOCK_SIZE];
+	for (int k = 0; k < BLOCK_SIZE - 1; k++) {
 
-		DATA_TYPE max_val = fabs(tmp_block_read[col_order[k]][k]);
+		DATA_TYPE tmp_scale_col[BLOCK_SIZE];
+		int col_order[BLOCK_SIZE];
+
+		for (int i=0; i < BLOCK_SIZE; i++) {
+			col_order[i] = i;
+		}
+
+		DATA_TYPE max_val = fabs(tmp_block_read[k][k]);
 		int pivot_col = k;
 		for (int i=k+1; i < BLOCK_SIZE; i++) {
-			DATA_TYPE curr_val = fabs(tmp_block_read[col_order[i]][k]);
+			DATA_TYPE curr_val = fabs(tmp_block_read[i][k]);
 			if (curr_val > max_val) {
 				max_val = curr_val;
 				pivot_col = i;
 			}
 		}
-		if (pivot_col != k) {
-			int tmp_col = col_order[k];
-			col_order[k] = col_order[pivot_col];
-			col_order[pivot_col] = tmp_col;
-		}
+		ipvt[k] = pivot_col;
+		col_order[pivot_col] = k;
+		col_order[k] = pivot_col;
+
 
 		scale_factors[k] = 1.0 / tmp_block_read[col_order[k]][k];
 		// For each element below it
 		#pragma unroll
 		for (int i = k + 1; i < BLOCK_SIZE; i++) {
-			tmp_scale_col[i] =  tmp_block_read[col_order[k]][i] * scale_factors[k];
-			tmp_block_write[col_order[k]][i] = tmp_scale_col[i];
+			tmp_scale_col[i] =  tmp_block_read[col_order[i]][k] * scale_factors[k];
+			tmp_block_write[i][k] = tmp_scale_col[i];
+			tmp_block_write[k][i] = tmp_block_read[col_order[k]][i];
 		}
+		tmp_block_write[k][k] = tmp_block_read[col_order[k]][k];
 
 		// For each column right of current diagonal element
 		for (int j = k + 1; j < BLOCK_SIZE; j++) {
-			DATA_TYPE scale_val = tmp_block_write[col_order[j]][k];
 			// For each element below it
 			#pragma unroll
 			for (int i = k+1; i < BLOCK_SIZE; i++) {
-				tmp_block_write[col_order[j]][i] = tmp_block_read[col_order[j]][i] - tmp_scale_col[i] * scale_val;
+				tmp_block_write[j][i] = tmp_block_read[col_order[j]][i] - tmp_scale_col[j] * tmp_block_read[col_order[k]][i];
 			}
 		}
 		for (int i = k; i < BLOCK_SIZE; i++) {
 			#pragma unroll
 			for (int j = 0; j <  BLOCK_SIZE; j++) {
-				tmp_block_read[col_order[i]][j] = tmp_block_write[col_order[i]][j];
+				tmp_block_read[i][j] = tmp_block_write[i][j];
 			}
 		}
+#ifdef DEBUG
+		printf("A(%d):\n", k);
+		for (int j = 0; j < BLOCK_SIZE; j++) {
+			for (int i = 0; i <  BLOCK_SIZE; i++) {
+				printf("%f, ", tmp_block_read[j][i]);
+			}
+			printf("\n");
+		}
+		printf("\n\n");
+#endif
 	}
 	for (int i = 0; i < BLOCK_SIZE; i++) {
 		#pragma unroll
 		for (int j = 0; j <  BLOCK_SIZE; j++) {
-			a_block_out[j][i] = tmp_block_write[col_order[i]][j];
+			a_block_out[i][j] = tmp_block_read[i][j];
 		}
 	}
 
@@ -182,8 +197,7 @@ void
 left_blocks_c2(local const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
 				local const DATA_TYPE current_block_in[BLOCK_SIZE][BLOCK_SIZE],
 				local DATA_TYPE current_block_out[BLOCK_SIZE][BLOCK_SIZE],
-				const DATA_TYPE scale_factors[BLOCK_SIZE],
-				const uint col_order[BLOCK_SIZE]) {
+				const DATA_TYPE scale_factors[BLOCK_SIZE]) {
 
 	DATA_TYPE tmp_block_write2[BLOCK_SIZE][BLOCK_SIZE];
 	DATA_TYPE tmp_block_read2[BLOCK_SIZE][BLOCK_SIZE];
@@ -193,7 +207,7 @@ left_blocks_c2(local const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
 	for (int i = 0; i < BLOCK_SIZE; i++) {
 		#pragma unroll
 		for (int j = 0; j <  BLOCK_SIZE; j++) {
-			tmp_block_read2[col_order[i]][j] = current_block_in[j][i];
+			tmp_block_read2[i][j] = current_block_in[j][i];
 		}
 	}
 	// For each diagonal element in top block
@@ -270,13 +284,20 @@ Case 3 of Zhangs description
 void
 top_blocks_c3(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 			  local const DATA_TYPE current_block_in[BLOCK_SIZE][BLOCK_SIZE],
-			  local DATA_TYPE current_block_out[BLOCK_SIZE][BLOCK_SIZE]) {
+			  local DATA_TYPE current_block_out[BLOCK_SIZE][BLOCK_SIZE],
+			  const int ipvt[BLOCK_SIZE]) {
 	DATA_TYPE tmp_block3[BLOCK_SIZE][BLOCK_SIZE];
+	int col_order[BLOCK_SIZE];
+
 	for (int j = 0; j < BLOCK_SIZE; j++) {
 		#pragma unroll
 		for (int i = 0; i <  BLOCK_SIZE; i++) {
 			current_block_out[j][i] = current_block_in[j][i];
 		}
+	}
+
+	for (int i=0; i < BLOCK_SIZE; i++) {
+		col_order[i] = i;
 	}
 	// For each diagonal element in left block
 	for (int k=0; k < BLOCK_SIZE; k++) {
@@ -353,16 +374,16 @@ void gefa(global DATA_TYPE* restrict a, global uint* pvt,  uint a_size) {
 		load_block(diag_block, a, diagonal_block, diagonal_block, a_size);
 
 		DATA_TYPE scale_factors[BLOCK_SIZE];
-		uint col_order[BLOCK_SIZE];
+		uint ipvt[BLOCK_SIZE];
 
 		// execute factorization of next block
 		lu_factorization_c1(diag_block, diag_block_out, scale_factors,
-													col_order);
+													ipvt);
 
 		#pragma unroll GLOBAL_MEM_UNROLL
 		for (int i=0; i<BLOCK_SIZE; i++) {
 			pvt[diagonal_block * BLOCK_SIZE + i] = diagonal_block * BLOCK_SIZE
-																+ col_order[i];
+																+ ipvt[i];
 		}
 
 		store_block(diag_block_out, a, diagonal_block, diagonal_block, a_size);
@@ -371,7 +392,7 @@ void gefa(global DATA_TYPE* restrict a, global uint* pvt,  uint a_size) {
 			inner_x_block++) {
 				// update top block
 				load_block(top_block, a, inner_x_block, diagonal_block, a_size);
-				top_blocks_c3(diag_block_out, top_block, top_block_out);
+				top_blocks_c3(diag_block_out, top_block, top_block_out, ipvt);
 				store_block(top_block_out, a, inner_x_block,
 														diagonal_block, a_size);
 
@@ -383,8 +404,7 @@ void gefa(global DATA_TYPE* restrict a, global uint* pvt,  uint a_size) {
 							load_block(left_block, a, diagonal_block,
 														inner_y_block, a_size);
 							left_blocks_c2(diag_block_out, left_block,
-												left_block_out, scale_factors,
-												col_order);
+												left_block_out, scale_factors);
 							store_block(left_block_out, a, diagonal_block,
 														inner_y_block, a_size);
 						} else {
