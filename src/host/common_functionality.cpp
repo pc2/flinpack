@@ -106,13 +106,13 @@ void printResults(std::shared_ptr<bm_execution::ExecutionResults> results,
                   size_t dataSize) {
     std::cout << std::setw(ENTRY_SPACE)
               << "best" << std::setw(ENTRY_SPACE) << "mean"
-              << std::setw(ENTRY_SPACE) << "GUOPS"
+              << std::setw(ENTRY_SPACE) << "GFLOPS"
               << std::setw(ENTRY_SPACE) << "error" << std::endl;
 
     // Calculate performance for kernel execution plus data transfer
     double tmean = 0;
     double tmin = std::numeric_limits<double>::max();
-    double gops = ((2.0e0*(dataSize*dataSize*dataSize))/3.0
+    double gflops = ((2.0e0*(dataSize*dataSize*dataSize))/3.0
                     + 2.0*(dataSize*dataSize)) / 1.0e9;
     for (double currentTime : results->times) {
         tmean +=  currentTime;
@@ -124,7 +124,7 @@ void printResults(std::shared_ptr<bm_execution::ExecutionResults> results,
 
     std::cout << std::setw(ENTRY_SPACE)
               << tmin << std::setw(ENTRY_SPACE) << tmean
-              << std::setw(ENTRY_SPACE) << gops / tmin
+              << std::setw(ENTRY_SPACE) << gflops / tmin
               << std::setw(ENTRY_SPACE) << (results->errorRate)
               << std::endl;
 }
@@ -159,9 +159,28 @@ Standard LU factorization on a block with fixed size
 Case 1 of Zhangs description
 */
 void
-gefa_ref_nopivot(DATA_TYPE* a, ulong n, ulong lda) {
+gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
+
+    for (int i = 0; i < n; i++) {
+        ipvt[i] = i;
+    }
     // For each diagnonal element
     for (int k = 0; k < n - 1; k++) {
+        DATA_TYPE max_val = fabs(a[k * lda + k]);
+        int pvt_index = k;
+        for (int i = k + 1; i < n; i++) {
+            if (max_val < fabs(a[i * lda + k])) {
+                pvt_index = i;
+                max_val = fabs(a[i * lda + k]);
+            }
+        }
+        for (int i = k; i < n; i++) {
+            DATA_TYPE tmp_val = a[k * lda + i];
+            a[k * lda + i] = a[pvt_index * lda + i];
+            a[pvt_index * lda + i] = tmp_val;
+        }
+        ipvt[k] = pvt_index;
+
         // For each element below it
         for (int i = k + 1; i < n; i++) {
             a[i * lda + k] *= 1.0 / a[k * lda + k];
@@ -173,30 +192,58 @@ gefa_ref_nopivot(DATA_TYPE* a, ulong n, ulong lda) {
                 a[i * lda + j] -= a[i * lda + k] * a[k * lda + j];
             }
         }
+
+        #ifdef DEBUG
+                std::cout << "A(k=" << k <<"): " << std::endl;
+                for (int i= 0; i < n; i++) {
+                    for (int j=0; j < n; j++) {
+                        std::cout << a[i*lda + j] << ", ";
+                    }
+                    std::cout << std::endl;
+                }
+                std::cout <<  std::endl;
+        #endif
     }
 }
 
 void
-gesl_ref_nopivot(DATA_TYPE* a, DATA_TYPE* b, ulong n, uint lda) {
+gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* ipvt, ulong n, uint lda) {
+
+    DATA_TYPE* b_tmp = new DATA_TYPE[n];
+
+    for (int k = 0; k < n; k++) {
+        b_tmp[k] = b[k];
+    }
+
     // solve l*y = b
     // For each row in matrix
     for (int k = 0; k < n-1; k++) {
+        if (ipvt[k] != k) {
+            DATA_TYPE tmp = b_tmp[k];
+            b_tmp[k] = b_tmp[ipvt[k]];
+            b_tmp[ipvt[k]] = tmp;
+        }
         // For each row below add
         for (int i = k+1; i < n; i++) {
             // add solved upper row to current row
-            b[i] -= b[k] * a[lda*i + k];
+            b_tmp[i] -= b_tmp[k] * a[lda*i + k];
         }
     }
 
     // now solve  u*x = y
 
     for (int k = n-1; k >= 0; k--) {
-        b[k] = b[k]/a[lda*k + k];
-        DATA_TYPE t = -b[k];
+        b_tmp[k] = b_tmp[k]/a[lda*k + k];
         for (int i = 0; i < k; i++) {
-            b[i] += t * a[lda*i + k];
+            b_tmp[i] -= b_tmp[k] * a[lda*i + k];
         }
     }
+
+    for (int k = 0; k < n; k++) {
+        b[k] = b_tmp[k];
+    }
+
+    delete b_tmp;
 }
 
 void dmxpy(int n1, DATA_TYPE* y, int n2, int ldm, DATA_TYPE* x, DATA_TYPE* m) {
@@ -231,8 +278,8 @@ checkLINPACKresults(DATA_TYPE* b_res, cl_int lda, cl_int n) {
     DATA_TYPE normx = 0.0;
 
     for (int i = 0; i < n; i++) {
-        resid = (resid > fabs((DATA_TYPE)b[i])) ? resid : fabs((DATA_TYPE)b[i]);
-        normx = (normx > fabs((DATA_TYPE)x[i])) ? normx : fabs((DATA_TYPE)x[i]);
+        resid = (resid > fabs(b[i])) ? resid : fabs(b[i]);
+        normx = (normx > fabs(x[i])) ? normx : fabs(x[i]);
     }
 
     DATA_TYPE eps = epslon(static_cast<DATA_TYPE>(1.0));

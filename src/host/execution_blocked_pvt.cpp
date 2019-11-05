@@ -77,6 +77,8 @@ namespace bm_execution {
         // Create Buffers for input and output
         cl::Buffer Buffer_a(context, CL_MEM_READ_WRITE,
                                             sizeof(DATA_TYPE)*lda*matrixSize);
+        cl::Buffer Buffer_pivot(context, CL_MEM_READ_WRITE,
+                                            sizeof(cl_int)*matrixSize);
 
         // create the kernels
         cl::Kernel gefakernel(program, GEFA_KERNEL,
@@ -87,7 +89,9 @@ namespace bm_execution {
         // prepare kernels
         err = gefakernel.setArg(0, Buffer_a);
         ASSERT_CL(err);
-        err = gefakernel.setArg(1, static_cast<uint>(matrixSize / blockSize));
+        err = gefakernel.setArg(1, Buffer_pivot);
+        ASSERT_CL(err);
+        err = gefakernel.setArg(2, static_cast<uint>(matrixSize / blockSize));
         ASSERT_CL(err);
 
         /* --- Execute actual benchmark kernels --- */
@@ -113,18 +117,41 @@ namespace bm_execution {
 
         compute_queue.enqueueReadBuffer(Buffer_a, CL_TRUE, 0,
                                          sizeof(DATA_TYPE)*lda*matrixSize, a);
+        compute_queue.enqueueReadBuffer(Buffer_pivot, CL_TRUE, 0,
+                                         sizeof(cl_int)*matrixSize, ipvt);
 
-#ifdef DEBUG
-        for (int i= 0; i < matrixSize; i++) {
-            for (int j=0; j < matrixSize; j++) {
-                std::cout << a[i*lda + j] << ", ";
-            }
-            std::cout << std::endl;
-        }
-        std::cout <<  std::endl;
-#endif
+ #ifdef DEBUG
+         for (int i= 0; i < matrixSize; i++) {
+             for (int j=0; j < matrixSize; j++) {
+                 std::cout << a[i*lda + j] << ", ";
+             }
+             std::cout << std::endl;
+         }
+         std::cout <<  std::endl;
+         std::cout << "IPVT: ";
+         for (int j=0; j < matrixSize; j++) {
+             std::cout << ipvt[j] << ", ";
+         }
+         std::cout << std::endl;
+         std::cout << std::endl;
+         std::cout << "B: ";
+         for (int j=0; j < matrixSize; j++) {
+             std::cout << b[j] << ", ";
+         }
+         std::cout << std::endl;
+         std::cout << std::endl;
+ #endif
 
         gesl_ref(a, b, ipvt, matrixSize, matrixSize);
+
+#ifdef DEBUG
+        std::cout << "B res: ";
+        for (int j=0; j < matrixSize; j++) {
+            std::cout << b[j] << ", ";
+        }
+        std::cout << std::endl;
+        std::cout << std::endl;
+#endif
 
         /* --- Check Results --- */
 
@@ -143,9 +170,30 @@ namespace bm_execution {
             std::cout << std::endl;
         }
         std::cout <<  std::endl;
+        std::cout << "IPVT: ";
+        for (int j=0; j < matrixSize; j++) {
+            std::cout << ipvt[j] << ", ";
+        }
+        std::cout << std::endl;
+        std::cout << std::endl;
+        std::cout << "B: ";
+        for (int j=0; j < matrixSize; j++) {
+            std::cout << b[j] << ", ";
+        }
+        std::cout << std::endl;
+        std::cout << std::endl;
 #endif
 
         gesl_ref(a, b, ipvt, matrixSize, matrixSize);
+
+#ifdef DEBUG
+        std::cout << "B res: ";
+        for (int j=0; j < matrixSize; j++) {
+            std::cout << b[j] << ", ";
+        }
+        std::cout << std::endl;
+        std::cout << std::endl;
+#endif
         checkLINPACKresults(b, matrixSize, matrixSize);
 
         free(reinterpret_cast<void *>(a));
