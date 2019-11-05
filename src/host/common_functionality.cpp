@@ -159,10 +159,10 @@ Standard LU factorization on a block with fixed size
 Case 1 of Zhangs description
 */
 void
-gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* col_order) {
+gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
 
     for (int i = 0; i < n; i++) {
-        col_order[i] = i;
+        ipvt[i] = i;
     }
     // For each diagnonal element
     for (int k = 0; k < n - 1; k++) {
@@ -179,10 +179,7 @@ gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* col_order) {
             a[k * lda + i] = a[pvt_index * lda + i];
             a[pvt_index * lda + i] = tmp_val;
         }
-        // int tmp = col_order[k];
-        // col_order[k] = col_order[pvt_index];
-        // col_order[pvt_index] = tmp;
-        col_order[k] = pvt_index;
+        ipvt[k] = pvt_index;
 
         // For each element below it
         for (int i = k + 1; i < n; i++) {
@@ -210,7 +207,7 @@ gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* col_order) {
 }
 
 void
-gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* col_order, ulong n, uint lda) {
+gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* ipvt, ulong n, uint lda) {
 
     DATA_TYPE* b_tmp = new DATA_TYPE[n];
 
@@ -221,10 +218,10 @@ gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* col_order, ulong n, uint lda) {
     // solve l*y = b
     // For each row in matrix
     for (int k = 0; k < n-1; k++) {
-        if (col_order[k] != k) {
+        if (ipvt[k] != k) {
             DATA_TYPE tmp = b_tmp[k];
-            b_tmp[k] = b_tmp[col_order[k]];
-            b_tmp[col_order[k]] = tmp;
+            b_tmp[k] = b_tmp[ipvt[k]];
+            b_tmp[ipvt[k]] = tmp;
         }
         // For each row below add
         for (int i = k+1; i < n; i++) {
