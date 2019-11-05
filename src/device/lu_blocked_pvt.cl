@@ -145,11 +145,13 @@ lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 
 
 		scale_factors[k] = 1.0 / tmp_block_read[col_order[k]][k];
-		// For each element below it
 		#pragma unroll
 		for (int i = k + 1; i < BLOCK_SIZE; i++) {
 			tmp_scale_col[i] =  tmp_block_read[col_order[i]][k] * scale_factors[k];
 			tmp_block_write[i][k] = tmp_scale_col[i];
+		}
+		#pragma unroll
+		for (int i = k + 1; i < BLOCK_SIZE; i++) {
 			tmp_block_write[k][i] = tmp_block_read[col_order[k]][i];
 		}
 		tmp_block_write[k][k] = tmp_block_read[col_order[k]][k];
@@ -285,17 +287,24 @@ top_blocks_c3(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 		}
 		col_order[k] = ipvt[k];
 		col_order[ipvt[k]] = k;
-		// For each column in current block
-		for (int j = k+1; j < BLOCK_SIZE; j++) {
-			// For each element below it
-			#pragma unroll
-			for (int i = 0; i < BLOCK_SIZE; i++) {
-				tmp_block3[j][i] = current_block_out[col_order[j]][i] - left_block[j][k] * current_block_out[col_order[k]][i];
-			}
-		}
+
+		DATA_TYPE new_k_row[BLOCK_SIZE];
 		#pragma unroll
 		for (int i = 0; i < BLOCK_SIZE; i++) {
-			tmp_block3[k][i] = current_block_out[col_order[k]][i];
+			new_k_row[i] = current_block_out[col_order[k]][i];
+		}
+		// For each column in current block
+		for (int j = k; j < BLOCK_SIZE; j++) {
+			DATA_TYPE multiply = 0.0;
+			// For each element below it
+			if (j > k) {
+				multiply = left_block[j][k];
+			}
+			#pragma unroll
+			for (int i = 0; i < BLOCK_SIZE; i++) {
+				tmp_block3[j][i] = current_block_out[col_order[j]][i]
+					- multiply * current_block_out[col_order[k]][i];
+			}
 		}
 		for (int j = k; j < BLOCK_SIZE; j++) {
 			#pragma unroll
@@ -355,7 +364,7 @@ LU factorization kernel
 */
 __attribute__((uses_global_work_offset(0)))
 __kernel
-void gefa(global DATA_TYPE* restrict a, global uint* pvt,  uint a_size) {
+void gefa(global DATA_TYPE* restrict a, global uint* restrict pvt,  uint a_size) {
 
 	local DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE];
 	local DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE];
