@@ -169,19 +169,20 @@ gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* col_order) {
         DATA_TYPE max_val = fabs(a[k * lda + k]);
         int pvt_index = k;
         for (int i = k + 1; i < n; i++) {
-            if (max_val < fabs(a[k * lda + i])) {
+            if (max_val < fabs(a[i * lda + k])) {
                 pvt_index = i;
-                max_val = fabs(a[k * lda + i]);
+                max_val = fabs(a[i * lda + k]);
             }
         }
-        for (int i = 0; i < n; i++) {
-            DATA_TYPE tmp_val = a[i * lda + k];
-            a[i * lda + k] = a[i * lda + pvt_index];
-            a[i * lda + pvt_index] = tmp_val;
+        for (int i = k; i < n; i++) {
+            DATA_TYPE tmp_val = a[k * lda + i];
+            a[k * lda + i] = a[pvt_index * lda + i];
+            a[pvt_index * lda + i] = tmp_val;
         }
-        int tmp = col_order[k];
-        col_order[k] = col_order[pvt_index];
-        col_order[pvt_index] = tmp;
+        // int tmp = col_order[k];
+        // col_order[k] = col_order[pvt_index];
+        // col_order[pvt_index] = tmp;
+        col_order[k] = pvt_index;
 
         // For each element below it
         for (int i = k + 1; i < n; i++) {
@@ -220,6 +221,11 @@ gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* col_order, ulong n, uint lda) {
     // solve l*y = b
     // For each row in matrix
     for (int k = 0; k < n-1; k++) {
+        if (col_order[k] != k) {
+            DATA_TYPE tmp = b_tmp[k];
+            b_tmp[k] = b_tmp[col_order[k]];
+            b_tmp[col_order[k]] = tmp;
+        }
         // For each row below add
         for (int i = k+1; i < n; i++) {
             // add solved upper row to current row
@@ -231,14 +237,13 @@ gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* col_order, ulong n, uint lda) {
 
     for (int k = n-1; k >= 0; k--) {
         b_tmp[k] = b_tmp[k]/a[lda*k + k];
-        DATA_TYPE t = -b_tmp[k];
         for (int i = 0; i < k; i++) {
-            b_tmp[i] += t * a[lda*i + k];
+            b_tmp[i] -= b_tmp[k] * a[lda*i + k];
         }
     }
 
     for (int k = 0; k < n; k++) {
-        b[k] = b_tmp[col_order[k]];
+        b[k] = b_tmp[k];
     }
 
     delete b_tmp;
