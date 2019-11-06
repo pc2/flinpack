@@ -398,40 +398,43 @@ void gefa(global DATA_TYPE* restrict a, global uint* restrict pvt,  uint a_size)
 
 		store_block(diag_block_out, a, diagonal_block, diagonal_block, a_size);
 
+		for (int inner_block = diagonal_block + 1; inner_block < a_size;
+			inner_block++) {
+			// update top block
+			load_block(top_block, a, inner_block, diagonal_block, a_size);
+			top_blocks_c3(diag_block_out, top_block, top_block_out, ipvt);
+			store_block(top_block_out, a, inner_block,
+													diagonal_block, a_size);
+			load_block(left_block, a, diagonal_block,
+										inner_block, a_size);
+			left_blocks_c2(diag_block_out, left_block,
+								left_block_out, scale_factors);
+			store_block(left_block_out, a, diagonal_block,
+										inner_block, a_size);
+
+		}
+
 		for (int inner_x_block = diagonal_block + 1; inner_x_block < a_size;
 			inner_x_block++) {
-				// update top block
-				load_block(top_block, a, inner_x_block, diagonal_block, a_size);
-				top_blocks_c3(diag_block_out, top_block, top_block_out, ipvt);
-				store_block(top_block_out, a, inner_x_block,
-														diagonal_block, a_size);
+			// update top block
+			load_block(top_block_out, a, inner_x_block, diagonal_block, a_size);
 
-				for (int inner_y_block = diagonal_block + 1;
-									inner_y_block < a_size; inner_y_block++) {
+			for (int inner_y_block = diagonal_block + 1;
+								inner_y_block < a_size; inner_y_block++) {
 
-						// update left block, if it was not already done
-						if (inner_x_block == diagonal_block + 1) {
-							load_block(left_block, a, diagonal_block,
-														inner_y_block, a_size);
-							left_blocks_c2(diag_block_out, left_block,
-												left_block_out, scale_factors);
-							store_block(left_block_out, a, diagonal_block,
-														inner_y_block, a_size);
-						} else {
-							load_block(left_block_out, a, diagonal_block,
-														inner_y_block, a_size);
-						}
+				load_block(left_block_out, a, diagonal_block,
+											inner_y_block, a_size);
 
-						// update inner block
-						load_block(current_block, a, inner_x_block,
-														inner_y_block, a_size);
+				// update inner block
+				load_block(current_block, a, inner_x_block,
+												inner_y_block, a_size);
 
-						inner_blocks_c4(left_block_out, top_block_out, current_block,
-															current_block_out);
+				inner_blocks_c4(left_block_out, top_block_out, current_block,
+													current_block_out);
 
-						store_block(current_block_out, a, inner_x_block,
-														inner_y_block, a_size);
-					}
+				store_block(current_block_out, a, inner_x_block,
+												inner_y_block, a_size);
 			}
+		}
 	}
 }
