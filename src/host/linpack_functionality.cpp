@@ -21,7 +21,7 @@ SOFTWARE.
 */
 
 /* Related header files */
-#include "src/host/common_functionality.h"
+#include "src/host/linpack_functionality.h"
 
 /* C++ standard library headers */
 #include <iostream>
@@ -40,7 +40,7 @@ SOFTWARE.
 #include "cxxopts.hpp"
 
 /* Project's headers */
-#include "src/host/benchmark_helper.h"
+#include "src/host/fpga_setup.h"
 #include "src/host/execution.h"
 
 
@@ -70,6 +70,13 @@ parseProgramParameters(int argc, char * argv[]) {
                 cxxopts::value<size_t>()
                                 ->default_value(std::to_string(MATRIX_SIZE)))
         ("i,nointerleaving", "Disable memory interleaving")
+        ("device", "Index of the device that has to be used. If -1 you "\
+        "will be asked which device to use if there are multiple devices "\
+        "available.", cxxopts::value<int>()->default_value(std::to_string(-1)))
+        ("platform", "Index of the platform that has to be used. If -1 "\
+        "you will be asked which platform to use if there are multiple "\
+        "platforms available.",
+            cxxopts::value<int>()->default_value(std::to_string(-1)))
         ("h,help", "Print this help");
     cxxopts::ParseResult result = options.parse(argc, argv);
 
@@ -91,6 +98,8 @@ parseProgramParameters(int argc, char * argv[]) {
             new ProgramSettings {result["n"].as<uint>(), result["b"].as<uint>(),
                                 result["m"].as<size_t>(),
                                 static_cast<bool>(result.count("i") <= 0),
+                                result["device"].as<int>(),
+                                result["platform"].as<int>(),
                                 result["f"].as<std::string>()});
     return sharedSettings;
 }
@@ -160,7 +169,6 @@ Case 1 of Zhangs description
 */
 void
 gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
-
     for (int i = 0; i < n; i++) {
         ipvt[i] = i;
     }
@@ -208,7 +216,6 @@ gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
 
 void
 gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* ipvt, ulong n, uint lda) {
-
     DATA_TYPE* b_tmp = new DATA_TYPE[n];
 
     for (int k = 0; k < n; k++) {
@@ -247,7 +254,6 @@ gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* ipvt, ulong n, uint lda) {
 }
 
 void dmxpy(int n1, DATA_TYPE* y, int n2, int ldm, DATA_TYPE* x, DATA_TYPE* m) {
-
     #pragma omp parallel for
     for (int i=0; i < n1; i++) {
         for (int j=0; j < n2; j++) {
@@ -258,10 +264,10 @@ void dmxpy(int n1, DATA_TYPE* y, int n2, int ldm, DATA_TYPE* x, DATA_TYPE* m) {
 
 double
 checkLINPACKresults(DATA_TYPE* b_res, cl_int lda, cl_int n) {
-    DATA_TYPE a[lda*n];
+    DATA_TYPE* a = new DATA_TYPE[lda*n];
     DATA_TYPE norma = 0;
-    DATA_TYPE x[n];
-    DATA_TYPE b[n];
+    DATA_TYPE* x = new DATA_TYPE[n];
+    DATA_TYPE* b = new DATA_TYPE[n];
     /*     compute a residual to verify results.  */
 
     for (int i = 0; i < n; i++) {
@@ -291,6 +297,10 @@ checkLINPACKresults(DATA_TYPE* b_res, cl_int lda, cl_int n) {
               << resid << std::setw(ENTRY_SPACE) << eps
               << std::setw(ENTRY_SPACE) << x[0]-1 << std::setw(ENTRY_SPACE)
               << x[n-1]-1 << std::endl;
+
+    delete a;
+    delete x;
+    delete b;
     return residn;
 }
 
@@ -316,11 +326,14 @@ int main(int argc, char * argv[]) {
     // Setup benchmark
     std::shared_ptr<ProgramSettings> programSettings =
                                             parseProgramParameters(argc, argv);
-    bm_helper::setupEnvironmentAndClocks();
-    std::vector<cl::Device> usedDevice = bm_helper::selectFPGADevice();
+    fpga_setup::setupEnvironmentAndClocks();
+    std::vector<cl::Device> usedDevice =
+                        fpga_setup::selectFPGADevice(programSettings->platform,
+                                                     programSettings->device);
     cl::Context context = cl::Context(usedDevice);
     const char* usedKernel = programSettings->kernelFileName.c_str();
-    cl::Program program = bm_helper::fpgaSetup(context, usedDevice, usedKernel);
+    cl::Program program = fpga_setup::fpgaSetup(context, usedDevice,
+                                                            usedKernel);
 
     // Give setup summary
     std::cout << "Summary:" << std::endl

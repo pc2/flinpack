@@ -59,7 +59,7 @@ MAIN_SRC := execution_$(TYPE).cpp
 KERNEL_MAIN_SRC := lu_$(TYPE).cl
 
 KERNEL_SRC := $(SRC_DIR)device/$(KERNEL_MAIN_SRC)
-SRCS := $(patsubst %, $(SRC_DIR)host/%, $(MAIN_SRC) benchmark_helper.cpp common_functionality.cpp)
+SRCS := $(patsubst %, $(SRC_DIR)host/%, $(MAIN_SRC) fpga_setup.cpp linpack_functionality.cpp)
 TARGET := $(MAIN_SRC:.cpp=)$(EXT_BUILD_SUFFIX)
 KERNEL_TARGET := $(KERNEL_MAIN_SRC:.cl=)$(EXT_BUILD_SUFFIX)
 

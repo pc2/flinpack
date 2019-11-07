@@ -74,6 +74,8 @@ struct ProgramSettings {
     uint blockSize;
     size_t matrixSize;
     bool useMemInterleaving;
+    int device;
+    int platform;
     std::string kernelFileName;
 };
 

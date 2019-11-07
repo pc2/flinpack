@@ -40,170 +40,172 @@ SOFTWARE.
 #endif
 
 /* Project's headers */
-#include "src/host/benchmark_helper.h"
-#include "src/host/common_functionality.h"
+#include "src/host/fpga_setup.h"
+#include "src/host/linpack_functionality.h"
 
 namespace bm_execution {
 
-    /*
-     Prepare kernels and execute benchmark
-    */
-    std::shared_ptr<ExecutionResults>
-    calculate(cl::Context context, cl::Device device, cl::Program program,
-                   uint repetitions, ulong matrixSize, uint blockSize) {
-       uint lda = matrixSize;
-       DATA_TYPE* a;
-       posix_memalign(reinterpret_cast<void**>(&a), 64,
-                      sizeof(DATA_TYPE)*lda*matrixSize);
-       DATA_TYPE* b;
-       posix_memalign(reinterpret_cast<void**>(&b), 64,
-                      sizeof(DATA_TYPE)* matrixSize);
-       cl_int* ipvt;
-       posix_memalign(reinterpret_cast<void**>(&ipvt), 64,
-                      sizeof(cl_int) * matrixSize);
+/*
+ Prepare kernels and execute benchmark
 
-        for (int i = 0; i < matrixSize; i++) {
-            ipvt[i] = i;
-        }
+ @copydoc bm_execution::calculate()
+*/
+std::shared_ptr<ExecutionResults>
+calculate(cl::Context context, cl::Device device, cl::Program program,
+               uint repetitions, ulong matrixSize, uint blockSize) {
+    uint lda = matrixSize;
+    DATA_TYPE* a;
+    posix_memalign(reinterpret_cast<void**>(&a), 64,
+                  sizeof(DATA_TYPE)*lda*matrixSize);
+    DATA_TYPE* b;
+    posix_memalign(reinterpret_cast<void**>(&b), 64,
+                  sizeof(DATA_TYPE)* matrixSize);
+    cl_int* ipvt;
+    posix_memalign(reinterpret_cast<void**>(&ipvt), 64,
+                  sizeof(cl_int) * matrixSize);
 
-       DATA_TYPE norma = 0;
-       double ops = (2.0e0*(matrixSize*matrixSize*matrixSize))/
-                     3.0 + 2.0*(matrixSize*matrixSize);
-       int err;
-
-        // Create Command queue
-        cl::CommandQueue compute_queue(context, device);
-
-        // Create Buffers for input and output
-        cl::Buffer Buffer_a(context, CL_MEM_READ_WRITE,
-                                            sizeof(DATA_TYPE)*lda*matrixSize);
-        cl::Buffer Buffer_pivot(context, CL_MEM_READ_WRITE,
-                                            sizeof(cl_int)*matrixSize);
-
-        // create the kernels
-        cl::Kernel gefakernel(program, GEFA_KERNEL,
-                                        &err);
-        ASSERT_CL(err);
-
-
-        // prepare kernels
-        err = gefakernel.setArg(0, Buffer_a);
-        ASSERT_CL(err);
-        err = gefakernel.setArg(1, Buffer_pivot);
-        ASSERT_CL(err);
-        err = gefakernel.setArg(2, static_cast<uint>(matrixSize / blockSize));
-        ASSERT_CL(err);
-
-        /* --- Execute actual benchmark kernels --- */
-
-        double t;
-        std::vector<double> executionTimes;
-        for (int i = 0; i < repetitions; i++) {
-            matgen(a, lda, matrixSize, b, &norma);
-            compute_queue.enqueueWriteBuffer(Buffer_a, CL_TRUE, 0,
-                                        sizeof(DATA_TYPE)*lda*matrixSize, a);
-            compute_queue.finish();
-            auto t1 = std::chrono::high_resolution_clock::now();
-            compute_queue.enqueueTask(gefakernel);
-            compute_queue.finish();
-            auto t2 = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> timespan =
-                std::chrono::duration_cast<std::chrono::duration<double>>
-                                                                    (t2 - t1);
-            executionTimes.push_back(timespan.count());
-        }
-
-        /* --- Read back results from Device --- */
-
-        compute_queue.enqueueReadBuffer(Buffer_a, CL_TRUE, 0,
-                                         sizeof(DATA_TYPE)*lda*matrixSize, a);
-        compute_queue.enqueueReadBuffer(Buffer_pivot, CL_TRUE, 0,
-                                         sizeof(cl_int)*matrixSize, ipvt);
-
- #ifdef DEBUG
-         for (int i= 0; i < matrixSize; i++) {
-             for (int j=0; j < matrixSize; j++) {
-                 std::cout << a[i*lda + j] << ", ";
-             }
-             std::cout << std::endl;
-         }
-         std::cout <<  std::endl;
-         std::cout << "IPVT: ";
-         for (int j=0; j < matrixSize; j++) {
-             std::cout << ipvt[j] << ", ";
-         }
-         std::cout << std::endl;
-         std::cout << std::endl;
-         std::cout << "B: ";
-         for (int j=0; j < matrixSize; j++) {
-             std::cout << b[j] << ", ";
-         }
-         std::cout << std::endl;
-         std::cout << std::endl;
- #endif
-
-        gesl_ref(a, b, ipvt, matrixSize, matrixSize);
-
-#ifdef DEBUG
-        std::cout << "B res: ";
-        for (int j=0; j < matrixSize; j++) {
-            std::cout << b[j] << ", ";
-        }
-        std::cout << std::endl;
-        std::cout << std::endl;
-#endif
-
-        /* --- Check Results --- */
-
-        double error = checkLINPACKresults(b, matrixSize, matrixSize);
-
-        /* Check CPU reference results */
-
-        matgen(a, lda, matrixSize, b, &norma);
-        gefa_ref(a, matrixSize, lda, ipvt);
-
-#ifdef DEBUG
-        for (int i= 0; i < matrixSize; i++) {
-            for (int j=0; j < matrixSize; j++) {
-                std::cout << a[i*lda + j] << ", ";
-            }
-            std::cout << std::endl;
-        }
-        std::cout <<  std::endl;
-        std::cout << "IPVT: ";
-        for (int j=0; j < matrixSize; j++) {
-            std::cout << ipvt[j] << ", ";
-        }
-        std::cout << std::endl;
-        std::cout << std::endl;
-        std::cout << "B: ";
-        for (int j=0; j < matrixSize; j++) {
-            std::cout << b[j] << ", ";
-        }
-        std::cout << std::endl;
-        std::cout << std::endl;
-#endif
-
-        gesl_ref(a, b, ipvt, matrixSize, matrixSize);
-
-#ifdef DEBUG
-        std::cout << "B res: ";
-        for (int j=0; j < matrixSize; j++) {
-            std::cout << b[j] << ", ";
-        }
-        std::cout << std::endl;
-        std::cout << std::endl;
-#endif
-        checkLINPACKresults(b, matrixSize, matrixSize);
-
-        free(reinterpret_cast<void *>(a));
-        free(reinterpret_cast<void *>(b));
-        free(reinterpret_cast<void *>(ipvt));
-
-        std::shared_ptr<ExecutionResults> results(
-                        new ExecutionResults{executionTimes,
-                                             error});
-        return results;
+    for (int i = 0; i < matrixSize; i++) {
+        ipvt[i] = i;
     }
+
+    DATA_TYPE norma = 0;
+    double ops = (2.0e0*(matrixSize*matrixSize*matrixSize))/
+                 3.0 + 2.0*(matrixSize*matrixSize);
+    int err;
+
+    // Create Command queue
+    cl::CommandQueue compute_queue(context, device);
+
+    // Create Buffers for input and output
+    cl::Buffer Buffer_a(context, CL_MEM_READ_WRITE,
+                                        sizeof(DATA_TYPE)*lda*matrixSize);
+    cl::Buffer Buffer_pivot(context, CL_MEM_READ_WRITE,
+                                        sizeof(cl_int)*matrixSize);
+
+    // create the kernels
+    cl::Kernel gefakernel(program, GEFA_KERNEL,
+                                    &err);
+    ASSERT_CL(err);
+
+
+    // prepare kernels
+    err = gefakernel.setArg(0, Buffer_a);
+    ASSERT_CL(err);
+    err = gefakernel.setArg(1, Buffer_pivot);
+    ASSERT_CL(err);
+    err = gefakernel.setArg(2, static_cast<uint>(matrixSize / blockSize));
+    ASSERT_CL(err);
+
+    /* --- Execute actual benchmark kernels --- */
+
+    double t;
+    std::vector<double> executionTimes;
+    for (int i = 0; i < repetitions; i++) {
+        matgen(a, lda, matrixSize, b, &norma);
+        compute_queue.enqueueWriteBuffer(Buffer_a, CL_TRUE, 0,
+                                    sizeof(DATA_TYPE)*lda*matrixSize, a);
+        compute_queue.finish();
+        auto t1 = std::chrono::high_resolution_clock::now();
+        compute_queue.enqueueTask(gefakernel);
+        compute_queue.finish();
+        auto t2 = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> timespan =
+            std::chrono::duration_cast<std::chrono::duration<double>>
+                                                                (t2 - t1);
+        executionTimes.push_back(timespan.count());
+    }
+
+    /* --- Read back results from Device --- */
+
+    compute_queue.enqueueReadBuffer(Buffer_a, CL_TRUE, 0,
+                                     sizeof(DATA_TYPE)*lda*matrixSize, a);
+    compute_queue.enqueueReadBuffer(Buffer_pivot, CL_TRUE, 0,
+                                     sizeof(cl_int)*matrixSize, ipvt);
+
+#ifdef DEBUG
+     for (int i= 0; i < matrixSize; i++) {
+         for (int j=0; j < matrixSize; j++) {
+             std::cout << a[i*lda + j] << ", ";
+         }
+         std::cout << std::endl;
+     }
+     std::cout <<  std::endl;
+     std::cout << "IPVT: ";
+     for (int j=0; j < matrixSize; j++) {
+         std::cout << ipvt[j] << ", ";
+     }
+     std::cout << std::endl;
+     std::cout << std::endl;
+     std::cout << "B: ";
+     for (int j=0; j < matrixSize; j++) {
+         std::cout << b[j] << ", ";
+     }
+     std::cout << std::endl;
+     std::cout << std::endl;
+#endif
+
+    gesl_ref(a, b, ipvt, matrixSize, matrixSize);
+
+#ifdef DEBUG
+    std::cout << "B res: ";
+    for (int j=0; j < matrixSize; j++) {
+        std::cout << b[j] << ", ";
+    }
+    std::cout << std::endl;
+    std::cout << std::endl;
+#endif
+
+    /* --- Check Results --- */
+
+    double error = checkLINPACKresults(b, matrixSize, matrixSize);
+
+    /* Check CPU reference results */
+
+    matgen(a, lda, matrixSize, b, &norma);
+    gefa_ref(a, matrixSize, lda, ipvt);
+
+#ifdef DEBUG
+    for (int i= 0; i < matrixSize; i++) {
+        for (int j=0; j < matrixSize; j++) {
+            std::cout << a[i*lda + j] << ", ";
+        }
+        std::cout << std::endl;
+    }
+    std::cout <<  std::endl;
+    std::cout << "IPVT: ";
+    for (int j=0; j < matrixSize; j++) {
+        std::cout << ipvt[j] << ", ";
+    }
+    std::cout << std::endl;
+    std::cout << std::endl;
+    std::cout << "B: ";
+    for (int j=0; j < matrixSize; j++) {
+        std::cout << b[j] << ", ";
+    }
+    std::cout << std::endl;
+    std::cout << std::endl;
+#endif
+
+    gesl_ref(a, b, ipvt, matrixSize, matrixSize);
+
+#ifdef DEBUG
+    std::cout << "B res: ";
+    for (int j=0; j < matrixSize; j++) {
+        std::cout << b[j] << ", ";
+    }
+    std::cout << std::endl;
+    std::cout << std::endl;
+#endif
+    checkLINPACKresults(b, matrixSize, matrixSize);
+
+    free(reinterpret_cast<void *>(a));
+    free(reinterpret_cast<void *>(b));
+    free(reinterpret_cast<void *>(ipvt));
+
+    std::shared_ptr<ExecutionResults> results(
+                    new ExecutionResults{executionTimes,
+                                         error});
+    return results;
+}
 
 }  // namespace bm_execution
