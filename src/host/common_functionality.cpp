@@ -30,6 +30,7 @@ SOFTWARE.
 #include <limits>
 #include <iomanip>
 #include <memory>
+#include <random>
 #include <vector>
 
 /* External library headers */
@@ -131,13 +132,13 @@ void printResults(std::shared_ptr<bm_execution::ExecutionResults> results,
 
 void matgen(DATA_TYPE* a, cl_int lda, cl_int n, DATA_TYPE* b,
             DATA_TYPE* norma) {
-    int init = 1325;
+    std::mt19937 gen(7);
+    std::uniform_real_distribution<> dis(-1.0, 1.0);
     *norma = 0.0;
     for (int j = 0; j < n; j++) {
         for (int i = 0; i < n; i++) {
-            init = 3125*init % 65536;
-            a[lda*j+i] = (init - 32768.0)/16384.0;
-            *norma = (a[lda*j+i] > *norma) ? a[lda*j+i] : *norma;
+            a[lda*i+j] = dis(gen);
+            *norma = (a[lda*i+j] > *norma) ? a[lda*i+j] : *norma;
         }
         for (int i = n; i < lda; i++) {
             a[lda*j+i] = 0;
@@ -160,7 +161,6 @@ Case 1 of Zhangs description
 */
 void
 gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
-
     for (int i = 0; i < n; i++) {
         ipvt[i] = i;
     }
@@ -174,6 +174,7 @@ gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
                 max_val = fabs(a[i * lda + k]);
             }
         }
+
         for (int i = k; i < n; i++) {
             DATA_TYPE tmp_val = a[k * lda + i];
             a[k * lda + i] = a[pvt_index * lda + i];
@@ -183,13 +184,13 @@ gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
 
         // For each element below it
         for (int i = k + 1; i < n; i++) {
-            a[i * lda + k] *= 1.0 / a[k * lda + k];
+            a[i * lda + k] *= -1.0 / a[k * lda + k];
         }
         // For each column right of current diagonal element
         for (int j = k + 1; j < n; j++) {
             // For each element below it
             for (int i = k+1; i < n; i++) {
-                a[i * lda + j] -= a[i * lda + k] * a[k * lda + j];
+                a[i * lda + j] += a[i * lda + k] * a[k * lda + j];
             }
         }
 
@@ -203,12 +204,12 @@ gefa_ref(DATA_TYPE* a, ulong n, ulong lda, int* ipvt) {
                 }
                 std::cout <<  std::endl;
         #endif
+
     }
 }
 
 void
 gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* ipvt, ulong n, uint lda) {
-
     DATA_TYPE* b_tmp = new DATA_TYPE[n];
 
     for (int k = 0; k < n; k++) {
@@ -226,7 +227,7 @@ gesl_ref(DATA_TYPE* a, DATA_TYPE* b, cl_int* ipvt, ulong n, uint lda) {
         // For each row below add
         for (int i = k+1; i < n; i++) {
             // add solved upper row to current row
-            b_tmp[i] -= b_tmp[k] * a[lda*i + k];
+            b_tmp[i] += b_tmp[k] * a[lda*i + k];
         }
     }
 
