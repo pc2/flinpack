@@ -79,7 +79,7 @@ Searches for the index of the absoulte maximum in the column and returns it.
 @param current_k The current column
 @returns index of the absolute maximum of the values between k and BLOCK_SIZE
 */
-#define BLOCK_SIZE_LOG 4
+#define BLOCK_SIZE_LOG 5
 int
 argmax(const DATA_TYPE column[BLOCK_SIZE], const int current_k) {
 	DATA_TYPE prepared_col[BLOCK_SIZE_LOG + 1][BLOCK_SIZE];
@@ -123,7 +123,7 @@ void
 lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 					local DATA_TYPE a_block_out[BLOCK_SIZE][BLOCK_SIZE],
 					DATA_TYPE scale_factors[BLOCK_SIZE],
-					uint ipvt[BLOCK_SIZE]) {
+					int ipvt[BLOCK_SIZE]) {
 
 	DATA_TYPE tmp_block_write[BLOCK_SIZE][BLOCK_SIZE];
 	DATA_TYPE tmp_block_read[BLOCK_SIZE][BLOCK_SIZE];
@@ -170,10 +170,9 @@ lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 			tmp_block_write[i][k] = tmp_scale_col[i];
 		}
 		#pragma unroll
-		for (int i = k + 1; i < BLOCK_SIZE; i++) {
+		for (int i = k; i < BLOCK_SIZE; i++) {
 			tmp_block_write[k][i] = tmp_block_read[col_order[k]][i];
 		}
-		tmp_block_write[k][k] = tmp_block_read[col_order[k]][k];
 
 		// For each column right of current diagonal element
 		for (int j = k + 1; j < BLOCK_SIZE; j++) {
@@ -182,10 +181,7 @@ lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 			for (int i = 0; i < BLOCK_SIZE; i++) {
 				if (i > k) {
 					tmp_block_write[j][i] = tmp_block_read[col_order[j]][i] - tmp_scale_col[j] * tmp_block_read[col_order[k]][i];
-				} else {
-					tmp_block_write[j][i] = tmp_block_read[col_order[j]][i];
 				}
-
 			}
 		}
 		#pragma unroll
@@ -280,7 +276,7 @@ void
 top_blocks_c3(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 			  local const DATA_TYPE current_block_in[BLOCK_SIZE][BLOCK_SIZE],
 			  local DATA_TYPE current_block_out[BLOCK_SIZE][BLOCK_SIZE],
-			  const uint ipvt[BLOCK_SIZE]) {
+			  const int ipvt[BLOCK_SIZE]) {
 	DATA_TYPE tmp_block_read3[BLOCK_SIZE][BLOCK_SIZE];
 	DATA_TYPE tmp_block_write3[BLOCK_SIZE][BLOCK_SIZE];
 
@@ -388,7 +384,7 @@ LU factorization kernel
 */
 __attribute__((uses_global_work_offset(0)))
 __kernel
-void gefa(global DATA_TYPE* restrict a, global uint* restrict pvt,  uint a_size) {
+void gefa(global DATA_TYPE* restrict a, global int* restrict pvt,  uint a_size) {
 
 	local DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE];
 	local DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE];
@@ -401,14 +397,14 @@ void gefa(global DATA_TYPE* restrict a, global uint* restrict pvt,  uint a_size)
 
 
 	// For each diagonal block do the following
-	#pragma disable_loop_pipelining
+	#pragma max_concurrency 1
 	for (int diagonal_block=0; diagonal_block < a_size; diagonal_block++) {
 
 		// load next block for factorization
 		load_block(diag_block, a, diagonal_block, diagonal_block, a_size);
 
 		DATA_TYPE scale_factors[BLOCK_SIZE];
-		uint ipvt[BLOCK_SIZE];
+		int ipvt[BLOCK_SIZE];
 
 		// execute factorization of next block
 		lu_factorization_c1(diag_block, diag_block_out, scale_factors,
@@ -425,14 +421,14 @@ void gefa(global DATA_TYPE* restrict a, global uint* restrict pvt,  uint a_size)
 		for (int inner_block = diagonal_block + 1; inner_block < a_size;
 			inner_block++) {
 			// update top block
+			load_block(left_block, a, diagonal_block,
+										inner_block, a_size);
 			load_block(top_block, a, inner_block, diagonal_block, a_size);
+			left_blocks_c2(diag_block_out, left_block,
+								left_block_out, scale_factors);
 			top_blocks_c3(diag_block_out, top_block, top_block_out, ipvt);
 			store_block(top_block_out, a, inner_block,
 													diagonal_block, a_size);
-			load_block(left_block, a, diagonal_block,
-										inner_block, a_size);
-			left_blocks_c2(diag_block_out, left_block,
-								left_block_out, scale_factors);
 			store_block(left_block_out, a, diagonal_block,
 										inner_block, a_size);
 
