@@ -163,7 +163,7 @@ lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 		col_order[k] = pivot_col;
 
 
-		scale_factors[k] = 1.0 / tmp_block_read[col_order[k]][k];
+		scale_factors[k] = -1.0 / tmp_block_read[col_order[k]][k];
 		#pragma unroll
 		for (int i = k + 1; i < BLOCK_SIZE; i++) {
 			tmp_scale_col[i] =  current_col[col_order[i]] * scale_factors[k];
@@ -180,7 +180,7 @@ lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 			#pragma unroll BLOCK_SIZE
 			for (int i = 0; i < BLOCK_SIZE; i++) {
 				if (i > k) {
-					tmp_block_write[j][i] = tmp_block_read[col_order[j]][i] - tmp_scale_col[j] * tmp_block_read[col_order[k]][i];
+					tmp_block_write[j][i] = tmp_block_read[col_order[j]][i] + tmp_scale_col[j] * tmp_block_read[col_order[k]][i];
 				}
 			}
 		}
@@ -248,7 +248,7 @@ left_blocks_c2(local const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
 			#pragma unroll
 			for (int i = 0; i < BLOCK_SIZE; i++) {
 				tmp_block_write2[j][i] =
-							tmp_block_read2[j][i] - tmp_scale_col[i]
+							tmp_block_read2[j][i] + tmp_scale_col[i]
 												* top_block[k][j];
 			}
 		}
@@ -308,7 +308,7 @@ top_blocks_c3(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 			#pragma unroll
 			for (int i = 0; i < BLOCK_SIZE; i++) {
 				tmp_block_write3[j][i] = tmp_block_read3[col_order[j]][i]
-					- multiply * tmp_block_read3[col_order[k]][i];
+					+ multiply * tmp_block_read3[col_order[k]][i];
 			}
 		}
 		for (int j = k; j < BLOCK_SIZE; j++) {
@@ -358,7 +358,7 @@ inner_blocks_c4(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 			// For each element below it in current block
 			#pragma unroll
 			for (int i = 0; i < BLOCK_SIZE; i++) {
-				tmp_block_write4[j][i] = tmp_block_read4[j][i] - left_block[j][k] * top_block[k][i];
+				tmp_block_write4[j][i] = tmp_block_read4[j][i] + left_block[j][k] * top_block[k][i];
 			}
 		}
 		for (int i = 0; i < BLOCK_SIZE; i++) {

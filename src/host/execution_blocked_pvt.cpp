@@ -120,7 +120,7 @@ namespace bm_execution {
         compute_queue.enqueueReadBuffer(Buffer_pivot, CL_TRUE, 0,
                                          sizeof(cl_int)*matrixSize, ipvt);
 
- #ifdef DEBUG
+#ifdef DEBUG
          for (int i= 0; i < matrixSize; i++) {
              for (int j=0; j < matrixSize; j++) {
                  std::cout << a[i*lda + j] << ", ";
@@ -140,7 +140,7 @@ namespace bm_execution {
          }
          std::cout << std::endl;
          std::cout << std::endl;
- #endif
+#endif
 
         gesl_ref(a, b, ipvt, matrixSize, matrixSize);
 
