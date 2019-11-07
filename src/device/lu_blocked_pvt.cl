@@ -397,7 +397,7 @@ void gefa(global DATA_TYPE* restrict a, global int* restrict pvt,  uint a_size) 
 
 
 	// For each diagonal block do the following
-	#pragma max_concurrency 1
+	#pragma disable_loop_pipelining
 	for (int diagonal_block=0; diagonal_block < a_size; diagonal_block++) {
 
 		// load next block for factorization
