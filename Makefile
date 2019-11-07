@@ -48,7 +48,7 @@ endif
 #
 ##
 TYPE := blocked
-GLOBAL_MEM_UNROLL := 8
+GLOBAL_MEM_UNROLL := 16
 BOARD := p520_hpc_sg280l
 MATRIX_SIZE := 256
 BLOCK_SIZE := 16
