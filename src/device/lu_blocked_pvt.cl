@@ -176,12 +176,16 @@ lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 		tmp_block_write[k][k] = tmp_block_read[col_order[k]][k];
 
 		// For each column right of current diagonal element
-		#pragma unroll
 		for (int j = k + 1; j < BLOCK_SIZE; j++) {
 			// For each element below it
-			#pragma unroll
-			for (int i = k+1; i < BLOCK_SIZE; i++) {
-				tmp_block_write[j][i] = tmp_block_read[col_order[j]][i] - tmp_scale_col[j] * tmp_block_read[col_order[k]][i];
+			#pragma unroll BLOCK_SIZE
+			for (int i = 0; i < BLOCK_SIZE; i++) {
+				if (i > k) {
+					tmp_block_write[j][i] = tmp_block_read[col_order[j]][i] - tmp_scale_col[j] * tmp_block_read[col_order[k]][i];
+				} else {
+					tmp_block_write[j][i] = tmp_block_read[col_order[j]][i];
+				}
+
 			}
 		}
 		#pragma unroll
@@ -354,7 +358,6 @@ inner_blocks_c4(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 	#pragma max_concurrency 1
 	for (int k=0; k < BLOCK_SIZE; k++) {
 		// For each column in top block
-		#pragma unroll
 		for (int j = 0; j < BLOCK_SIZE; j++) {
 			// For each element below it in current block
 			#pragma unroll
@@ -362,7 +365,6 @@ inner_blocks_c4(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 				tmp_block_write4[j][i] = tmp_block_read4[j][i] - left_block[j][k] * top_block[k][i];
 			}
 		}
-		#pragma unroll
 		for (int i = 0; i < BLOCK_SIZE; i++) {
 			#pragma unroll
 			for (int j = 0; j < BLOCK_SIZE; j++) {
