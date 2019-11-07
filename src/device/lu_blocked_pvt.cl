@@ -96,6 +96,11 @@ copy_block(local const DATA_TYPE a_from[BLOCK_SIZE][BLOCK_SIZE],
 Standard LU factorization on a block with fixed size
 
 Case 1 of Zhangs description
+
+@param a_block_in Input block that has to be LU factorized
+@param a_block_out Output block to write the result
+@param scale_factors scaling factors that where used to scale the columns. They can be reused in C2
+@param ipvt Pivoting information for C3 and solving of the system
 */
 void
 lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
@@ -194,6 +199,11 @@ lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 Modifying the blocks on the leftmost side
 
 Case 2 of Zhangs description
+
+@param top_block LU factorized top block
+@param current_block_in Current input block
+@param current_block_out Block to write the output to
+@param scale_factors Scale factors that were calculated during LU factorization
 */
 void
 left_blocks_c2(local const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
@@ -250,6 +260,11 @@ left_blocks_c2(local const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
 Modifying the blocks on the top but not on the left
 
 Case 3 of Zhangs description
+
+@param left_block LU factorized left block
+@param current_block_in Current input block
+@param current_block_out Block to write the output to
+@param ipvt Pivot information created by the LU factorization
 */
 void
 top_blocks_c3(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
@@ -332,6 +347,11 @@ top_blocks_c3(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 Modifying the inner blocks
 
 Case 4 of Zhangs description
+
+@param left_block Most left block that was modified by C2 before
+@param top_block Most upper block that was modified by C3 before
+@param current_block_in Current input block
+@param current_block_out Block to write the output to
 */
 void
 inner_blocks_c4(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
@@ -360,6 +380,7 @@ inner_blocks_c4(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 LU factorization kernel
 
 @param a The data array representing the whole matrix in global memory
+@param pvt Pivoting information
 @param a_size the x and y size of the matrix in blocks
 */
 __attribute__((uses_global_work_offset(0)))
@@ -398,6 +419,7 @@ void gefa(global DATA_TYPE* restrict a, global uint* restrict pvt,  uint a_size)
 
 		store_block(diag_block_out, a, diagonal_block, diagonal_block, a_size);
 
+		// process all blocks columnwise
 		for (int inner_x_block = diagonal_block + 1; inner_x_block < a_size;
 			inner_x_block++) {
 				// update top block
