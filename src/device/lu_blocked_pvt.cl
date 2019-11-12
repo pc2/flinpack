@@ -38,7 +38,7 @@ Load a block from global memory
 @param lda_block LDA of the matrix in number of blocks
 */
 void
-load_block(local DATA_TYPE a_block[BLOCK_SIZE][BLOCK_SIZE],
+load_block(DATA_TYPE a_block[BLOCK_SIZE][BLOCK_SIZE],
 			global DATA_TYPE* restrict a,
 			uint x_block, uint y_block, uint lda_block) {
 
@@ -61,7 +61,7 @@ Store a block to global memory
 @param lda_block LDA of the matrix in number of blocks
 */
 void
-store_block(local DATA_TYPE a_block[BLOCK_SIZE][BLOCK_SIZE],
+store_block(DATA_TYPE a_block[BLOCK_SIZE][BLOCK_SIZE],
 			global DATA_TYPE* restrict a,
 			uint x_block, uint y_block, uint lda_block) {
 
@@ -183,8 +183,8 @@ Case 1 of Zhangs description
 @param ipvt Pivoting information for C3 and solving of the system
 */
 void
-lu_factorization_c1(local const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
-					local DATA_TYPE a_block_out[BLOCK_SIZE][BLOCK_SIZE],
+lu_factorization_c1(const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
+					DATA_TYPE a_block_out[BLOCK_SIZE][BLOCK_SIZE],
 					DATA_TYPE scale_factors[BLOCK_SIZE],
 					int ipvt[BLOCK_SIZE]) {
 
@@ -285,9 +285,9 @@ Case 2 of Zhangs description
 @param scale_factors Scale factors that were calculated during LU factorization
 */
 void
-left_blocks_c2(local const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
-				local const DATA_TYPE current_block_in[BLOCK_SIZE][BLOCK_SIZE],
-				local DATA_TYPE current_block_out[BLOCK_SIZE][BLOCK_SIZE],
+left_blocks_c2(const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
+				const DATA_TYPE current_block_in[BLOCK_SIZE][BLOCK_SIZE],
+				DATA_TYPE current_block_out[BLOCK_SIZE][BLOCK_SIZE],
 				const DATA_TYPE scale_factors[BLOCK_SIZE]) {
 
 	DATA_TYPE tmp_block_write2[BLOCK_SIZE][BLOCK_SIZE];
@@ -346,10 +346,10 @@ Case 3 of Zhangs description
 @param ipvt Pivot information created by the LU factorization
 */
 void
-top_blocks_c3(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
-			  local const DATA_TYPE current_block_in[BLOCK_SIZE][BLOCK_SIZE],
-			  local DATA_TYPE current_block_out[BLOCK_SIZE][BLOCK_SIZE],
-			  const int ipvt[BLOCK_SIZE]) {
+top_blocks_c3(const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
+			  const DATA_TYPE current_block_in[BLOCK_SIZE][BLOCK_SIZE],
+			  DATA_TYPE current_block_out[BLOCK_SIZE][BLOCK_SIZE],
+			  int ipvt[BLOCK_SIZE]) {
 	DATA_TYPE tmp_block_read3[BLOCK_SIZE][BLOCK_SIZE];
 	DATA_TYPE tmp_block_write3[BLOCK_SIZE][BLOCK_SIZE];
 
@@ -410,10 +410,10 @@ Case 4 of Zhangs description
 @param current_block_out Block to write the output to
 */
 void
-inner_blocks_c4(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
-				local const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
-				local const DATA_TYPE current_block_in[BLOCK_SIZE][BLOCK_SIZE],
-				local DATA_TYPE current_block_out[BLOCK_SIZE][BLOCK_SIZE]) {
+inner_blocks_c4(const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
+				const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
+				const DATA_TYPE current_block_in[BLOCK_SIZE][BLOCK_SIZE],
+				DATA_TYPE current_block_out[BLOCK_SIZE][BLOCK_SIZE]) {
 	DATA_TYPE tmp_top_block[BLOCK_SIZE / GEMM_BLOCK][BLOCK_SIZE / GEMM_BLOCK]
 							 [GEMM_BLOCK][GEMM_BLOCK];
 	DATA_TYPE tmp_left_block[BLOCK_SIZE / GEMM_BLOCK][BLOCK_SIZE / GEMM_BLOCK]
@@ -422,6 +422,7 @@ inner_blocks_c4(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 	#pragma loop_coalesce
 	for (int i = 0; i < BLOCK_SIZE / GEMM_BLOCK; i++) {
 		for (int j = 0; j < BLOCK_SIZE / GEMM_BLOCK; j++) {
+			#pragma unroll
 			for (int ii = 0; ii < GEMM_BLOCK; ii++) {
 				#pragma unroll
 				for (int jj = 0; jj < GEMM_BLOCK; jj++) {
@@ -443,13 +444,15 @@ inner_blocks_c4(local const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 			for (int j = 0; j < BLOCK_SIZE / GEMM_BLOCK; j++) {
 				DATA_TYPE   tmp_block_out[GEMM_BLOCK][GEMM_BLOCK];
 				local_gemm_8x8(tmp_left_block[i][k], tmp_top_block[k][j], tmp_block_out);
-				for (int ii = 0; ii < GEMM_BLOCK; ii++) {
-					if (k == 0) {
+				if (k == 0) {
+					for (int ii = 0; ii < GEMM_BLOCK; ii++) {
 						#pragma unroll
 						for (int jj = 0; jj < GEMM_BLOCK; jj++) {
 							current_block_out[i * GEMM_BLOCK + ii][j * GEMM_BLOCK + jj] = current_block_in[i * GEMM_BLOCK + ii][j * GEMM_BLOCK + jj] + tmp_block_out[ii][jj];
 						}
-					} else {
+					}
+				} else {
+					for (int ii = 0; ii < GEMM_BLOCK; ii++) {
 						#pragma unroll
 						for (int jj = 0; jj < GEMM_BLOCK; jj++) {
 							current_block_out[i * GEMM_BLOCK + ii][j * GEMM_BLOCK + jj] += tmp_block_out[ii][jj];
@@ -473,20 +476,11 @@ __attribute__((uses_global_work_offset(0)))
 __kernel
 void gefa(global DATA_TYPE* restrict a, global int* restrict pvt,  uint a_size) {
 
-	local DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE];
-	local DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE];
-	local DATA_TYPE diag_block[BLOCK_SIZE][BLOCK_SIZE];
-	local DATA_TYPE top_block_out[BLOCK_SIZE][BLOCK_SIZE];
-	local DATA_TYPE left_block_out[BLOCK_SIZE][BLOCK_SIZE];
-	local DATA_TYPE diag_block_out[BLOCK_SIZE][BLOCK_SIZE];
-	local DATA_TYPE current_block[BLOCK_SIZE][BLOCK_SIZE];
-	local DATA_TYPE current_block_out[BLOCK_SIZE][BLOCK_SIZE];
-
-
 	// For each diagonal block do the following
 	#pragma disable_loop_pipelining
 	for (int diagonal_block=0; diagonal_block < a_size; diagonal_block++) {
-
+		DATA_TYPE diag_block[BLOCK_SIZE][BLOCK_SIZE];
+		DATA_TYPE diag_block_out[BLOCK_SIZE][BLOCK_SIZE];
 		// load next block for factorization
 		load_block(diag_block, a, diagonal_block, diagonal_block, a_size);
 
@@ -507,6 +501,10 @@ void gefa(global DATA_TYPE* restrict a, global int* restrict pvt,  uint a_size) 
 
 		for (int inner_block = diagonal_block + 1; inner_block < a_size;
 			inner_block++) {
+			DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE];
+			DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE];
+			DATA_TYPE top_block_out[BLOCK_SIZE][BLOCK_SIZE];
+			DATA_TYPE left_block_out[BLOCK_SIZE][BLOCK_SIZE];
 			// update top block
 			load_block(left_block, a, diagonal_block,
 										inner_block, a_size);
@@ -524,11 +522,15 @@ void gefa(global DATA_TYPE* restrict a, global int* restrict pvt,  uint a_size) 
 		// process all blocks columnwise
 		for (int inner_x_block = diagonal_block + 1; inner_x_block < a_size;
 			inner_x_block++) {
+			DATA_TYPE top_block_out[BLOCK_SIZE][BLOCK_SIZE];
 			// update top block
 			load_block(top_block_out, a, inner_x_block, diagonal_block, a_size);
 
 			for (int inner_y_block = diagonal_block + 1;
 								inner_y_block < a_size; inner_y_block++) {
+				DATA_TYPE left_block_out[BLOCK_SIZE][BLOCK_SIZE];
+				DATA_TYPE current_block[BLOCK_SIZE][BLOCK_SIZE];
+				DATA_TYPE current_block_out[BLOCK_SIZE][BLOCK_SIZE];
 
 				load_block(left_block_out, a, diagonal_block,
 											inner_y_block, a_size);
