@@ -69,16 +69,10 @@ COMMON_FLAGS := -DBLOCK_SIZE=$(BLOCK_SIZE) -DBLOCK_SIZE_LOG=$(BLOCK_SIZE_LOG)\
 CXX_PARAMS := $(CXX_FLAGS) -DMATRIX_SIZE=$(MATRIX_SIZE)
 AOC_PARAMS := $(AOC_FLAGS) -board=$(BOARD) -DGLOBAL_MEM_UNROLL=$(GLOBAL_MEM_UNROLL)
 
-ifdef DATA_TYPE
-CXX_PARAMS += -DDATA_TYPE=cl_$(DATA_TYPE) -DDATA_TYPE_UNSIGNED=cl_$(DATA_TYPE_UNSIGNED)
-AOC_PARAMS += -DDATA_TYPE=$(DATA_TYPE) -DDATA_TYPE_UNSIGNED=$(DATA_TYPE_UNSIGNED)
-endif
-
 CXX_PARAMS += -I. -I./cxxopts/include --std=c++11
 
 $(info Common Parameters:)
 $(info BUILD_SUFFIX            = $(BUILD_SUFFIX))
-$(info MATRIX_SIZE             = $(MATRIX_SIZE))
 $(info BLOCK_SIZE              = $(BLOCK_SIZE))
 $(info TYPE                    = $(TYPE))
 $(info Device Only Parameters:)
@@ -87,6 +81,7 @@ $(info AOC_FLAGS               = $(AOC_FLAGS))
 $(info GLOBAL_MEM_UNROLL       = $(GLOBAL_MEM_UNROLL))
 $(info Host Only Parameters:)
 $(info CXX_FLAGS               = $(CXX_FLAGS))
+$(info MATRIX_SIZE             = $(MATRIX_SIZE))
 $(info ***************************)
 
 default: info

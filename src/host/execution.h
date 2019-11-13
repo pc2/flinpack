@@ -30,7 +30,7 @@ SOFTWARE.
 #include "CL/cl.hpp"
 
 #ifndef BLOCK_SIZE
-#define BLOCK_SIZE 8
+#define BLOCK_SIZE 32
 #endif
 
 
