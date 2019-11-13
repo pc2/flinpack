@@ -22,11 +22,26 @@ SOFTWARE.
 
 #define DATA_TYPE float
 
+/**
+Specify size of the blocks that will be loaded to local memory for calculation
+*/
 #ifndef BLOCK_SIZE
-#define BLOCK_SIZE 8
+#define BLOCK_SIZE 32
 #endif
 
+/**
+Size of matrix multiplication that is fully unrolled.
+*/
 #define GEMM_BLOCK 8
+
+/**
+Must be logarithm of the chosen block size.
+It is used for the maximum calculation.
+*/
+#ifndef BLOCK_SIZE_LOG
+#define BLOCK_SIZE_LOG 5
+#endif
+
 
 /**
 Load a block from global memory
@@ -45,11 +60,12 @@ load_block(DATA_TYPE a_block[BLOCK_SIZE][BLOCK_SIZE],
 	for (int i = 0; i < BLOCK_SIZE; i++) {
 		#pragma unroll GLOBAL_MEM_UNROLL
 		for (int j = 0; j < BLOCK_SIZE; j++) {
-			a_block[i][j] = a[(y_block * lda_block * BLOCK_SIZE + x_block) * BLOCK_SIZE + j
-								+ i * lda_block * BLOCK_SIZE];
+			a_block[i][j] = a[(y_block * lda_block * BLOCK_SIZE + x_block)
+							  * BLOCK_SIZE + j + i * lda_block * BLOCK_SIZE];
 		}
 	}
 }
+
 
 /**
 Store a block to global memory
@@ -74,12 +90,14 @@ store_block(DATA_TYPE a_block[BLOCK_SIZE][BLOCK_SIZE],
 	}
 }
 
+
 /**
 Calculate
 
 c = c +  a.dot(b)
 
 where a,b,c are matrices of size GEMM_BLOCK.
+Calculation itself is fully unrolled.
  */
 void local_gemm_8x8(const DATA_TYPE a[GEMM_BLOCK][GEMM_BLOCK],
                     const DATA_TYPE b[GEMM_BLOCK][GEMM_BLOCK],
@@ -87,9 +105,9 @@ void local_gemm_8x8(const DATA_TYPE a[GEMM_BLOCK][GEMM_BLOCK],
 
     DATA_TYPE a_block[GEMM_BLOCK][GEMM_BLOCK + 1];
     DATA_TYPE b_block[GEMM_BLOCK + 1][GEMM_BLOCK];
-    DATA_TYPE c_block[GEMM_BLOCK][GEMM_BLOCK];
+	DATA_TYPE c_block[GEMM_BLOCK][GEMM_BLOCK];
 
-    // Load block of matrix A and B and init C
+    // Load block of matrix A and B and init C and reorder values
     #pragma unroll
     for (int y=0; y<GEMM_BLOCK; y++) {
         #pragma unroll
@@ -101,7 +119,7 @@ void local_gemm_8x8(const DATA_TYPE a[GEMM_BLOCK][GEMM_BLOCK],
         }
     }
 
-    //Calculate intermediate result for block
+    // Calculate result for 8x8 matrix
     #pragma unroll
     for (int i=0;i<GEMM_BLOCK; i++) {
         #pragma unroll
@@ -121,12 +139,12 @@ void local_gemm_8x8(const DATA_TYPE a[GEMM_BLOCK][GEMM_BLOCK],
     }
 
 	#pragma unroll
-    for (int y=0; y<GEMM_BLOCK; y++) {
-        #pragma unroll
-        for (int x=0; x<GEMM_BLOCK; x++) {
-            c_out[y][x] = c_block[y][x];
-        }
-    }
+	for(int y=0; y < GEMM_BLOCK; y++) {
+		#pragma unroll
+		for (int x=0; x<GEMM_BLOCK;x++) {
+			c_out[y][x] += c_block[y][x];
+		}
+	}
 }
 
 
@@ -137,11 +155,11 @@ Searches for the index of the absoulte maximum in the column and returns it.
 @param current_k The current column
 @returns index of the absolute maximum of the values between k and BLOCK_SIZE
 */
-#define BLOCK_SIZE_LOG 5
 int
 argmax(const DATA_TYPE column[BLOCK_SIZE], const int current_k) {
 	DATA_TYPE prepared_col[BLOCK_SIZE_LOG + 1][BLOCK_SIZE];
 	DATA_TYPE prepared_col_index[BLOCK_SIZE_LOG + 1][BLOCK_SIZE];
+	// Initialize first row of values and indices
 	#pragma unroll
 	for (int i=0; i < BLOCK_SIZE; i++) {
 		if (i < current_k) {
@@ -151,31 +169,36 @@ argmax(const DATA_TYPE column[BLOCK_SIZE], const int current_k) {
 		}
 		prepared_col_index[0][i] = i;
 	}
+	// Fully unroll maximum calculation
 	int remaining_vals = BLOCK_SIZE;
 	#pragma unroll
 	for (int stage=1; stage <= BLOCK_SIZE_LOG; stage++) {
 		remaining_vals = remaining_vals >> 1;
 		#pragma unroll
 		for (int i=0; i < remaining_vals; i++) {
-			if (prepared_col[stage - 1][i] > prepared_col[stage - 1][i + remaining_vals]) {
+			if (prepared_col[stage - 1][i] > prepared_col[stage - 1]
+														[i + remaining_vals]) {
 				prepared_col[stage][i] = prepared_col[stage - 1][i];
 				prepared_col_index[stage][i] = prepared_col_index[stage - 1][i];
 			} else {
-				prepared_col[stage][i] = prepared_col[stage - 1][i + remaining_vals];
-				prepared_col_index[stage][i] = prepared_col_index[stage - 1][i + remaining_vals];
+				prepared_col[stage][i] = prepared_col[stage - 1]
+														[i + remaining_vals];
+				prepared_col_index[stage][i] = prepared_col_index[stage - 1]
+														[i + remaining_vals];
 			}
 		}
 	}
-
+	// The first value in the last row contains the maximum index
 	return prepared_col_index[BLOCK_SIZE_LOG][0];
 }
-
 
 
 /**
 Standard LU factorization on a block with fixed size
 
 Case 1 of Zhangs description
+
+TODO: This routine is not optimized yet and just offer basic functionality
 
 @param a_block_in Input block that has to be LU factorized
 @param a_block_out Output block to write the result
@@ -243,7 +266,8 @@ lu_factorization_c1(const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 			#pragma unroll BLOCK_SIZE
 			for (int i = 0; i < BLOCK_SIZE; i++) {
 				if (i > k) {
-					tmp_block_write[j][i] = tmp_block_read[col_order[j]][i] + tmp_scale_col[j] * tmp_block_read[col_order[k]][i];
+					tmp_block_write[j][i] = tmp_block_read[col_order[j]][i]
+						+ tmp_scale_col[j] * tmp_block_read[col_order[k]][i];
 				}
 			}
 		}
@@ -254,16 +278,6 @@ lu_factorization_c1(const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 				tmp_block_read[i][j] = tmp_block_write[i][j];
 			}
 		}
-#ifdef DEBUG
-		printf("A(%d):\n", k);
-		for (int j = 0; j < BLOCK_SIZE; j++) {
-			for (int i = 0; i <  BLOCK_SIZE; i++) {
-				printf("%f, ", tmp_block_read[j][i]);
-			}
-			printf("\n");
-		}
-		printf("\n\n");
-#endif
 	}
 	for (int i = 0; i < BLOCK_SIZE; i++) {
 		#pragma unroll
@@ -274,10 +288,13 @@ lu_factorization_c1(const DATA_TYPE a_block_in[BLOCK_SIZE][BLOCK_SIZE],
 
 }
 
+
 /**
 Modifying the blocks on the leftmost side
 
 Case 2 of Zhangs description
+
+TODO: This routine is not optimized yet and just offer basic functionality
 
 @param top_block LU factorized top block
 @param current_block_in Current input block
@@ -335,10 +352,13 @@ left_blocks_c2(const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
 	}
 }
 
+
 /**
 Modifying the blocks on the top but not on the left
 
 Case 3 of Zhangs description
+
+TODO: This routine is not optimized yet and just offer basic functionality
 
 @param left_block LU factorized left block
 @param current_block_in Current input block
@@ -352,7 +372,6 @@ top_blocks_c3(const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 			  int ipvt[BLOCK_SIZE]) {
 	DATA_TYPE tmp_block_read3[BLOCK_SIZE][BLOCK_SIZE];
 	DATA_TYPE tmp_block_write3[BLOCK_SIZE][BLOCK_SIZE];
-
 
 	for (int j = 0; j < BLOCK_SIZE; j++) {
 		#pragma unroll
@@ -399,6 +418,7 @@ top_blocks_c3(const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 	}
 }
 
+
 /**
 Modifying the inner blocks
 
@@ -412,13 +432,17 @@ Case 4 of Zhangs description
 void
 inner_blocks_c4(const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 				const DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE],
-				const DATA_TYPE current_block_in[BLOCK_SIZE][BLOCK_SIZE],
+				DATA_TYPE current_block_in[BLOCK_SIZE][BLOCK_SIZE],
 				DATA_TYPE current_block_out[BLOCK_SIZE][BLOCK_SIZE]) {
 	DATA_TYPE tmp_top_block[BLOCK_SIZE / GEMM_BLOCK][BLOCK_SIZE / GEMM_BLOCK]
 							 [GEMM_BLOCK][GEMM_BLOCK];
 	DATA_TYPE tmp_left_block[BLOCK_SIZE / GEMM_BLOCK][BLOCK_SIZE / GEMM_BLOCK]
 							 [GEMM_BLOCK][GEMM_BLOCK];
+	DATA_TYPE tmp_out_block[BLOCK_SIZE / GEMM_BLOCK][BLOCK_SIZE / GEMM_BLOCK]
+ 							 [GEMM_BLOCK][GEMM_BLOCK];
 
+	// Load the inputs into 8x8 smaller blocks for easier access during
+	// calculation
 	#pragma loop_coalesce
 	for (int i = 0; i < BLOCK_SIZE / GEMM_BLOCK; i++) {
 		for (int j = 0; j < BLOCK_SIZE / GEMM_BLOCK; j++) {
@@ -430,34 +454,38 @@ inner_blocks_c4(const DATA_TYPE left_block[BLOCK_SIZE][BLOCK_SIZE],
 														[j * GEMM_BLOCK + jj];
 					tmp_left_block[i][j][ii][jj] = left_block[i * GEMM_BLOCK + ii]
 														[j * GEMM_BLOCK + jj];
+					tmp_out_block[i][j][ii][jj] = current_block_in[i * GEMM_BLOCK + ii]
+														[j * GEMM_BLOCK + jj];
 				}
 			}
 		}
 	}
 
-	#pragma loop_coalesce 3
-	// For each diagonal element in left block
-	for (int k=0; k < BLOCK_SIZE / GEMM_BLOCK; k++) {
-		// For each column in top block
-		for (int i = 0; i < BLOCK_SIZE / GEMM_BLOCK; i++) {
-			// For each element below it in current block
-			for (int j = 0; j < BLOCK_SIZE / GEMM_BLOCK; j++) {
-				DATA_TYPE   tmp_block_out[GEMM_BLOCK][GEMM_BLOCK];
-				local_gemm_8x8(tmp_left_block[i][k], tmp_top_block[k][j], tmp_block_out);
-				if (k == 0) {
-					for (int ii = 0; ii < GEMM_BLOCK; ii++) {
-						#pragma unroll
-						for (int jj = 0; jj < GEMM_BLOCK; jj++) {
-							current_block_out[i * GEMM_BLOCK + ii][j * GEMM_BLOCK + jj] = current_block_in[i * GEMM_BLOCK + ii][j * GEMM_BLOCK + jj] + tmp_block_out[ii][jj];
-						}
-					}
-				} else {
-					for (int ii = 0; ii < GEMM_BLOCK; ii++) {
-						#pragma unroll
-						for (int jj = 0; jj < GEMM_BLOCK; jj++) {
-							current_block_out[i * GEMM_BLOCK + ii][j * GEMM_BLOCK + jj] += tmp_block_out[ii][jj];
-						}
-					}
+	#pragma loop_coalesce 2
+	// For each column in top block
+	for (int i = 0; i < BLOCK_SIZE / GEMM_BLOCK; i++) {
+		// For each element below it in current block
+		for (int j = 0; j < BLOCK_SIZE / GEMM_BLOCK; j++) {
+			DATA_TYPE   tmp_small_block_out[GEMM_BLOCK][GEMM_BLOCK];
+			#pragma unroll
+			for (int ii = 0; ii < GEMM_BLOCK; ii++) {
+				#pragma unroll
+				for (int jj = 0; jj < GEMM_BLOCK; jj++) {
+					tmp_small_block_out[ii][jj] = 0;
+				}
+			}
+			// For each diagonal element in left block
+			for (int k=0; k < BLOCK_SIZE / GEMM_BLOCK; k++) {
+				local_gemm_8x8(tmp_left_block[i][k], tmp_top_block[k][j],
+														tmp_small_block_out);
+			}
+			#pragma unroll
+			for (int ii = 0; ii < GEMM_BLOCK; ii++) {
+				#pragma unroll
+				for (int jj = 0; jj < GEMM_BLOCK; jj++) {
+					current_block_out[i * GEMM_BLOCK + ii]
+						[j * GEMM_BLOCK + jj] = tmp_out_block[i][j][ii][jj]
+						+ tmp_small_block_out[ii][jj];
 				}
 			}
 		}
@@ -477,7 +505,6 @@ __kernel
 void gefa(global DATA_TYPE* restrict a, global int* restrict pvt,  uint a_size) {
 
 	// For each diagonal block do the following
-	#pragma disable_loop_pipelining
 	for (int diagonal_block=0; diagonal_block < a_size; diagonal_block++) {
 		DATA_TYPE diag_block[BLOCK_SIZE][BLOCK_SIZE];
 		DATA_TYPE diag_block_out[BLOCK_SIZE][BLOCK_SIZE];
@@ -487,10 +514,11 @@ void gefa(global DATA_TYPE* restrict a, global int* restrict pvt,  uint a_size) 
 		DATA_TYPE scale_factors[BLOCK_SIZE];
 		int ipvt[BLOCK_SIZE];
 
-		// execute factorization of next block
+		// LU factorize the diagonal block
 		lu_factorization_c1(diag_block, diag_block_out, scale_factors,
 													ipvt);
 
+		// Store pivoting information in global memory
 		#pragma unroll GLOBAL_MEM_UNROLL
 		for (int i=0; i<BLOCK_SIZE; i++) {
 			pvt[diagonal_block * BLOCK_SIZE + i] = diagonal_block * BLOCK_SIZE
@@ -499,6 +527,8 @@ void gefa(global DATA_TYPE* restrict a, global int* restrict pvt,  uint a_size) 
 
 		store_block(diag_block_out, a, diagonal_block, diagonal_block, a_size);
 
+		// For each block below and right of the diagonal block
+		// finish LU factorization and scaling
 		for (int inner_block = diagonal_block + 1; inner_block < a_size;
 			inner_block++) {
 			DATA_TYPE top_block[BLOCK_SIZE][BLOCK_SIZE];
@@ -519,11 +549,11 @@ void gefa(global DATA_TYPE* restrict a, global int* restrict pvt,  uint a_size) 
 
 		}
 
-		// process all blocks columnwise
+		// Update all remaining blocks
 		for (int inner_x_block = diagonal_block + 1; inner_x_block < a_size;
 			inner_x_block++) {
+
 			DATA_TYPE top_block_out[BLOCK_SIZE][BLOCK_SIZE];
-			// update top block
 			load_block(top_block_out, a, inner_x_block, diagonal_block, a_size);
 
 			for (int inner_y_block = diagonal_block + 1;
@@ -535,7 +565,6 @@ void gefa(global DATA_TYPE* restrict a, global int* restrict pvt,  uint a_size) 
 				load_block(left_block_out, a, diagonal_block,
 											inner_y_block, a_size);
 
-				// update inner block
 				load_block(current_block, a, inner_x_block,
 												inner_y_block, a_size);
 
