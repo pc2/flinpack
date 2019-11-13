@@ -35,15 +35,6 @@ Short description of the program
                             " proposed in the HPCC benchmark suite for FPGA"
 
 /*
-Total length of the data array used for random accesses.
-The array should allocate half of the available global memory space.
-Keep in mind that this also depends on DATA_TYPE.
-*/
-#ifndef DATA_LENGTH
-#define DATA_LENGTH 67108864
-#endif
-
-/*
 Number of times the execution of the benchmark will be repeated.
 */
 #ifndef NTIMES
@@ -74,6 +65,8 @@ struct ProgramSettings {
     uint blockSize;
     size_t matrixSize;
     bool useMemInterleaving;
+    int device;
+    int platform;
     std::string kernelFileName;
 };
 

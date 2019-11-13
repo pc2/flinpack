@@ -47,11 +47,12 @@ endif
 # change for compilation and synthesis.
 #
 ##
-TYPE := blocked
-GLOBAL_MEM_UNROLL := 8
+TYPE := blocked_pvt
+GLOBAL_MEM_UNROLL := 16
 BOARD := p520_hpc_sg280l
 MATRIX_SIZE := 256
-BLOCK_SIZE := 16
+BLOCK_SIZE := 32
+BLOCK_SIZE_LOG := 5
 ## End build settings
 
 # The source files that differ between the chosen type
@@ -59,25 +60,19 @@ MAIN_SRC := execution_$(TYPE).cpp
 KERNEL_MAIN_SRC := lu_$(TYPE).cl
 
 KERNEL_SRC := $(SRC_DIR)device/$(KERNEL_MAIN_SRC)
-SRCS := $(patsubst %, $(SRC_DIR)host/%, $(MAIN_SRC) benchmark_helper.cpp common_functionality.cpp)
+SRCS := $(patsubst %, $(SRC_DIR)host/%, $(MAIN_SRC) fpga_setup.cpp linpack_functionality.cpp)
 TARGET := $(MAIN_SRC:.cpp=)$(EXT_BUILD_SUFFIX)
 KERNEL_TARGET := $(KERNEL_MAIN_SRC:.cl=)$(EXT_BUILD_SUFFIX)
 
-COMMON_FLAGS := -DBLOCK_SIZE=$(BLOCK_SIZE)\
+COMMON_FLAGS := -DBLOCK_SIZE=$(BLOCK_SIZE) -DBLOCK_SIZE_LOG=$(BLOCK_SIZE_LOG)\
  				-DQUARTUS_MAJOR_VERSION=$(QUARTUS_MAJOR_VERSION)
 CXX_PARAMS := $(CXX_FLAGS) -DMATRIX_SIZE=$(MATRIX_SIZE)
 AOC_PARAMS := $(AOC_FLAGS) -board=$(BOARD) -DGLOBAL_MEM_UNROLL=$(GLOBAL_MEM_UNROLL)
-
-ifdef DATA_TYPE
-CXX_PARAMS += -DDATA_TYPE=cl_$(DATA_TYPE) -DDATA_TYPE_UNSIGNED=cl_$(DATA_TYPE_UNSIGNED)
-AOC_PARAMS += -DDATA_TYPE=$(DATA_TYPE) -DDATA_TYPE_UNSIGNED=$(DATA_TYPE_UNSIGNED)
-endif
 
 CXX_PARAMS += -I. -I./cxxopts/include --std=c++11
 
 $(info Common Parameters:)
 $(info BUILD_SUFFIX            = $(BUILD_SUFFIX))
-$(info MATRIX_SIZE             = $(MATRIX_SIZE))
 $(info BLOCK_SIZE              = $(BLOCK_SIZE))
 $(info TYPE                    = $(TYPE))
 $(info Device Only Parameters:)
@@ -86,6 +81,7 @@ $(info AOC_FLAGS               = $(AOC_FLAGS))
 $(info GLOBAL_MEM_UNROLL       = $(GLOBAL_MEM_UNROLL))
 $(info Host Only Parameters:)
 $(info CXX_FLAGS               = $(CXX_FLAGS))
+$(info MATRIX_SIZE             = $(MATRIX_SIZE))
 $(info ***************************)
 
 default: info
