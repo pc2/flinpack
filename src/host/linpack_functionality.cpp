@@ -122,8 +122,14 @@ void printResults(std::shared_ptr<bm_execution::ExecutionResults> results,
     // Calculate performance for kernel execution plus data transfer
     double tmean = 0;
     double tmin = std::numeric_limits<double>::max();
-    double gflops = ((2.0e0*(dataSize*dataSize*dataSize))/3.0
-                    + 2.0*(dataSize*dataSize)) / 1.0e9;
+
+    // GFLOPs for calculation of both GEFA and GESL.
+    // Currently only GEFA is calculated on the FPGA so GFLOPS have to be
+    // reduced.
+    // double gflops = ((2.0e0*(dataSize*dataSize*dataSize))/3.0
+    //                 + 2.0*(dataSize*dataSize)) / 1.0e9;
+    // TODO: Change this when GESL is also calculated on FPGA
+    double gflops = (2.0e0*(dataSize*dataSize*dataSize))/3.0/1.0e9;
     for (double currentTime : results->times) {
         tmean +=  currentTime;
         if (currentTime < tmin) {

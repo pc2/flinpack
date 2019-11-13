@@ -29,10 +29,6 @@ SOFTWARE.
 #include <memory>
 #include <vector>
 
-#ifdef DEBUG
-#include <iostream>
-#endif
-
 /* External library headers */
 #include "CL/cl.hpp"
 #if QUARTUS_MAJOR_VERSION > 18
@@ -122,60 +118,13 @@ calculate(cl::Context context, cl::Device device, cl::Program program,
     compute_queue.enqueueReadBuffer(Buffer_pivot, CL_TRUE, 0,
                                      sizeof(cl_int)*matrixSize, ipvt);
 
-
+    // Solve linear equations on CPU
+    // TODO: This has to be done on FPGA
     gesl_ref(a, b, ipvt, matrixSize, matrixSize);
-
-#ifdef DEBUG
-    std::cout << "B res: ";
-    for (int j=0; j < matrixSize; j++) {
-        std::cout << b[j] << ", ";
-    }
-    std::cout << std::endl;
-    std::cout << std::endl;
-#endif
 
     /* --- Check Results --- */
 
     double error = checkLINPACKresults(b, matrixSize, matrixSize);
-
-    /* Check CPU reference results */
-
-//     matgen(a, lda, matrixSize, b, &norma);
-//     gefa_ref(a, matrixSize, lda, ipvt);
-//
-// #ifdef DEBUG
-//     for (int i= 0; i < matrixSize; i++) {
-//         for (int j=0; j < matrixSize; j++) {
-//             std::cout << a[i*lda + j] << ", ";
-//         }
-//         std::cout << std::endl;
-//     }
-//     std::cout <<  std::endl;
-//     std::cout << "IPVT: ";
-//     for (int j=0; j < matrixSize; j++) {
-//         std::cout << ipvt[j] << ", ";
-//     }
-//     std::cout << std::endl;
-//     std::cout << std::endl;
-//     std::cout << "B: ";
-//     for (int j=0; j < matrixSize; j++) {
-//         std::cout << b[j] << ", ";
-//     }
-//     std::cout << std::endl;
-//     std::cout << std::endl;
-// #endif
-//
-//     gesl_ref(a, b, ipvt, matrixSize, matrixSize);
-//
-// #ifdef DEBUG
-//     std::cout << "B res: ";
-//     for (int j=0; j < matrixSize; j++) {
-//         std::cout << b[j] << ", ";
-//     }
-//     std::cout << std::endl;
-//     std::cout << std::endl;
-// #endif
-//     checkLINPACKresults(b, matrixSize, matrixSize);
 
     free(reinterpret_cast<void *>(a));
     free(reinterpret_cast<void *>(b));
